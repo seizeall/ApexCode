@@ -1,5 +1,7 @@
 let sessionId = null;
 let currentRun = null;
+let selectedMode = 'ask';
+const modeHelp = {full: '直接完成任务，安全边界仍然有效', ask: '先确认需求，再决定下一步', plan: '只生成执行计划，不修改工作区'};
 const $ = (id) => document.getElementById(id);
 
 async function request(url, options) {
@@ -47,7 +49,7 @@ async function sendPrompt(prompt) {
   if (!sessionId) await newSession();
   if (!prompt.trim()) return;
   $('prompt').value = ''; addEvent('USER TASK', prompt, 'user'); setStatus('排队中', 'running');
-  const data = await request(`/api/sessions/${sessionId}/messages`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt}) });
+  const data = await request(`/api/sessions/${sessionId}/messages`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt, mode: selectedMode}) });
   currentRun = data.run_id; $('run-log').innerHTML = '<div class="log-entry">任务已创建</div>';
   const stream = new EventSource(`/api/runs/${currentRun}/events`);
   stream.onmessage = (message) => {
@@ -77,6 +79,11 @@ async function init() {
   $('composer').onsubmit = (e) => { e.preventDefault(); sendPrompt($('prompt').value); };
   $('prompt').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPrompt(e.target.value); } };
   document.querySelectorAll('[data-prompt]').forEach(button => button.onclick = () => sendPrompt(button.dataset.prompt));
+  document.querySelectorAll('[data-mode]').forEach(button => button.onclick = () => {
+    selectedMode = button.dataset.mode;
+    document.querySelectorAll('[data-mode]').forEach(item => item.classList.toggle('active', item === button));
+    $('mode-help').textContent = modeHelp[selectedMode];
+  });
   try { const cfg = await request('/api/config'); $('workspace-label').textContent = cfg.workspace; $('connection').innerHTML = `<i></i>${cfg.configured ? '模型已配置' : '等待配置 API Key'}`; if (cfg.configured) $('connection').classList.add('ready'); } catch (error) { $('connection').textContent = '服务未连接'; }
   await loadTree(); await newSession();
 }

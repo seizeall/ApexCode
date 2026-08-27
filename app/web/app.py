@@ -18,6 +18,7 @@ from app.tools.registry import ToolRegistry
 
 class MessageBody(BaseModel):
     prompt: str
+    mode: str = "ask"
 
 
 class ApprovalBody(BaseModel):
@@ -52,10 +53,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             run.status = "running"
         await run.queue.put(event)
 
-    async def worker(run: RunState, prompt: str) -> None:
+    async def worker(run: RunState, prompt: str, mode: str) -> None:
         run.status = "running"
 
         async def approve(kind: str, payload: dict[str, Any]) -> bool:
+            if mode == "full":
+                await publish(run, {"type": "approval_auto", "action": kind, "payload": payload})
+                return True
             approval_id = uuid.uuid4().hex[:10]
             future: asyncio.Future[bool] = asyncio.get_running_loop().create_future()
             run.approvals[approval_id] = future
@@ -70,7 +74,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async def emit(event: dict[str, Any]) -> None:
             await publish(run, event)
 
-        result, run.history = await AgentService(cfg).run(prompt, approve, emit, session_histories.get(run.session_id))
+        result, run.history = await AgentService(cfg).run(prompt, approve, emit, session_histories.get(run.session_id), mode=mode)
         session_histories[run.session_id] = run.history
         failed = result.startswith(("模型请求失败", "未配置", "达到最大"))
         run.status = "failed" if failed else "completed"
@@ -110,11 +114,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "会话不存在。")
         if not body.prompt.strip():
             raise HTTPException(400, "任务不能为空。")
+        if body.mode not in {"full", "plan", "ask"}:
+            raise HTTPException(400, "未知运行模式。")
         run_id = uuid.uuid4().hex[:12]
         run = RunState(run_id, session_id)
         runs[run_id] = run
         sessions[session_id].append(run_id)
-        asyncio.create_task(worker(run, body.prompt.strip()))
+        asyncio.create_task(worker(run, body.prompt.strip(), body.mode))
         return {"run_id": run_id}
 
     @app.get("/api/runs/{run_id}/events")

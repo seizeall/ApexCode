@@ -5,7 +5,8 @@ ApexCode 是一个本地优先的编程智能体。它通过兼容接口理解�
 2. 安装依赖：pip install -r requirements.txt
 3. 复制 .env.example 为 .env，或设置 CODING_AGENT_API_KEY、CODING_AGENT_BASE_URL、CODING_AGENT_MODEL、CODING_AGENT_WORKSPACE。
 
-运行 CLI：python -m app.cli "检查 examples/demo_project 并整理 TODO"
+运行 CLI：python -m app.cli --mode ask "检查 examples/demo_project 并整理 TODO"
+模式：`ask` 先让模型确认需求；`plan` 只输出执行计划，不使用本地工具；`full` 在工作区和危险命令拦截仍有效的前提下自动完成，不逐次询问确认。
 运行网页：python -m uvicorn app.web.app:app --host 127.0.0.1 --port 8000，然后打开 http://127.0.0.1:8000
 测试：pytest
 
