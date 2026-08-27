@@ -1,2 +1,0 @@
-[console_scripts]
-workbench-agent = app.cli:main

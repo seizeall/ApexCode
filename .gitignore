@@ -7,3 +7,4 @@ __pycache__/
 !.env.example
 tmp/
 *.log
+*.egg-info/
