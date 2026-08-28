@@ -48,20 +48,17 @@ async function newSession() {
 async function sendPrompt(prompt) {
   if (!sessionId) await newSession();
   if (!prompt.trim()) return;
-  $('prompt').value = ''; addEvent('USER TASK', prompt, 'user'); setStatus('排队中', 'running');
+  $('prompt').value = ''; setStatus('处理中', 'running');
   const data = await request(`/api/sessions/${sessionId}/messages`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt, mode: selectedMode}) });
-  currentRun = data.run_id; $('run-log').innerHTML = '<div class="log-entry">任务已创建</div>';
+  currentRun = data.run_id;
   const stream = new EventSource(`/api/runs/${currentRun}/events`);
   stream.onmessage = (message) => {
     const event = JSON.parse(message.data);
     if (event.type === 'status') return;
-    if (event.type === 'step') { addEvent('AGENT', event.message); $('run-log').innerHTML += `<div class="log-entry">${event.message}</div>`; }
-    if (event.type === 'assistant') addEvent('AGENT RESPONSE', event.message, 'assistant');
-    if (event.type === 'tool_start') addEvent(`TOOL · ${event.tool}`, JSON.stringify(event.arguments, null, 2), 'tool');
-    if (event.type === 'tool_result') $('run-log').innerHTML += `<div class="log-entry">${event.tool} 已返回</div>`;
-    if (event.type === 'error') { addEvent('ERROR', event.message, 'error'); setStatus('执行失败', 'failed'); }
+    // Keep the workspace quiet while a task is running. Only the final result is rendered.
+    if (event.type === 'error') setStatus('执行失败', 'failed');
     if (event.type === 'approval_required') showApproval(event);
-    if (event.type === 'done') { addEvent('DONE', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : '执行失败', event.status === 'completed' ? 'done' : 'failed'); stream.close(); loadTree(); }
+    if (event.type === 'done') { addEvent('最终结果', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : '执行失败', event.status === 'completed' ? 'done' : 'failed'); stream.close(); loadTree(); }
   };
   stream.onerror = () => { if (currentRun) setStatus('连接中断', 'failed'); stream.close(); };
 }

@@ -12,6 +12,8 @@ def test_web_serves_workbench_and_workspace(tmp_path: Path) -> None:
     page = client.get("/")
     assert page.status_code == 200
     assert "ApexCode" in page.text
+    assert 'id="run-log"' not in page.text
+    assert "运行记录" not in page.text
     tree = client.get("/api/workspace/tree")
     assert tree.status_code == 200
     assert tree.json()["entries"][0]["name"] == "demo.py"
