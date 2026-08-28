@@ -80,7 +80,9 @@ async function newSession() {
 async function sendPrompt(prompt) {
   if (!sessionId) await newSession();
   if (!prompt.trim()) return;
-  $('prompt').value = ''; setStatus('处理中', 'running');
+  $('prompt').value = '';
+  addEvent('你的提问', prompt, 'user-question');
+  setStatus('处理中', 'running');
   const data = await request(`/api/sessions/${sessionId}/messages`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt, mode: selectedMode}) });
   currentRun = data.run_id;
   detailEvents = []; $('details-toggle').classList.remove('hidden'); renderDetails();

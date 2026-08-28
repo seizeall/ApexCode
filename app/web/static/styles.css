@@ -51,6 +51,7 @@ h1 { font-size: 25px; line-height: 1.2; margin: 9px 0 0; color: #1b2c3a; }
 .suggestions button { background: #fff; border: 1px solid #d4e1e4; color: #31746f; border-radius: 6px; padding: 8px 11px; font-size: 11px; cursor: pointer; transition: all .2s ease; }
 .suggestions button:hover { border-color: var(--accent); color: var(--accent); background: #f3fbfa; transform: translateY(-2px); box-shadow: var(--shadow); }
 .event { margin: 12px 0; padding: 14px 16px; border-left: 2px solid var(--accent); background: #fff; border-radius: 0 8px 8px 0; box-shadow: var(--shadow); font-size: 13px; line-height: 1.7; white-space: pre-wrap; animation: rise-in .3s ease both; }
+.event.user-question { width: min(86%, 700px); margin-left: auto; border-left: 0; border-right: 2px solid #7fa9e5; border-radius: 8px 0 0 8px; background: #edf4ff; color: #28496f; }
 .event.error { border-left-color: #d66f73; color: #a44249; }
 .event .event-label { display: block; color: #81909d; font-size: 10px; margin-bottom: 5px; letter-spacing: .08em; font-weight: 700; }
 .composer { margin: 0 42px 32px; border: 1px solid #cbd8de; border-radius: 10px; background: #fff; box-shadow: 0 7px 20px #263d490e; transition: border-color .2s, box-shadow .2s; }
