@@ -11,6 +11,56 @@ async function request(url, options) {
   return response.json();
 }
 
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
+}
+
+function inlineMarkdown(value) {
+  return escapeHtml(value)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/__([^_]+)__/g, '<strong>$1</strong>')
+    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noreferrer">$1</a>');
+}
+
+function markdownToHtml(markdown) {
+  const lines = String(markdown).replace(/\r\n?/g, '\n').split('\n');
+  const output = [];
+  let index = 0;
+  while (index < lines.length) {
+    const line = lines[index];
+    if (/^```/.test(line.trim())) {
+      const language = line.trim().slice(3).trim();
+      const code = [];
+      index += 1;
+      while (index < lines.length && !/^```/.test(lines[index].trim())) { code.push(lines[index]); index += 1; }
+      if (index < lines.length) index += 1;
+      output.push(`<pre class="markdown-code"><code class="language-${escapeHtml(language)}">${escapeHtml(code.join('\n'))}</code></pre>`);
+      continue;
+    }
+    if (line.includes('|') && index + 1 < lines.length && /^\s*\|?\s*:?-{3,}/.test(lines[index + 1])) {
+      const parseRow = (row) => row.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(cell => cell.trim());
+      const headers = parseRow(line); index += 2; const rows = [];
+      while (index < lines.length && lines[index].includes('|') && lines[index].trim()) { rows.push(parseRow(lines[index])); index += 1; }
+      output.push(`<div class="markdown-table-wrap"><table class="markdown-table"><thead><tr>${headers.map(cell => `<th>${inlineMarkdown(cell)}</th>`).join('')}</tr></thead><tbody>${rows.map(row => `<tr>${headers.map((_, cellIndex) => `<td>${inlineMarkdown(row[cellIndex] || '')}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`);
+      continue;
+    }
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) { output.push(`<h${heading[1].length}>${inlineMarkdown(heading[2])}</h${heading[1].length}>`); index += 1; continue; }
+    if (/^\s*[-*+]\s+/.test(line)) {
+      const items = [];
+      while (index < lines.length && /^\s*[-*+]\s+/.test(lines[index])) { items.push(lines[index].replace(/^\s*[-*+]\s+/, '')); index += 1; }
+      output.push(`<ul>${items.map(item => `<li>${inlineMarkdown(item)}</li>`).join('')}</ul>`); continue;
+    }
+    if (!line.trim()) { index += 1; continue; }
+    const paragraph = [line]; index += 1;
+    while (index < lines.length && lines[index].trim() && !/^```/.test(lines[index].trim()) && !/^(#{1,3})\s+/.test(lines[index])) { paragraph.push(lines[index]); index += 1; }
+    output.push(`<p>${inlineMarkdown(paragraph.join('\n')).replace(/\n/g, '<br>')}</p>`);
+  }
+  return output.join('');
+}
+
 function addEvent(label, text, type = '') {
   const timeline = $('timeline');
   const welcome = timeline.querySelector('.welcome');
@@ -21,7 +71,9 @@ function addEvent(label, text, type = '') {
   const identity = isUser ? '你' : 'ApexCode';
   const displayLabel = isUser ? '你的提问' : label;
   el.innerHTML = `<div class="message-meta"><span class="message-avatar">${identity[0]}</span><span class="event-label">${displayLabel}</span></div><div class="message-body"></div>`;
-  el.querySelector('.message-body').textContent = text;
+  const body = el.querySelector('.message-body');
+  if (type === 'assistant' || type === 'error') body.innerHTML = markdownToHtml(text);
+  else body.textContent = text;
   timeline.appendChild(el);
   timeline.scrollTop = timeline.scrollHeight;
 }
