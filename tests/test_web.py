@@ -16,6 +16,7 @@ def test_web_serves_workbench_and_workspace(tmp_path: Path) -> None:
     assert "运行记录" not in page.text
     assert 'id="details-drawer"' in page.text
     assert "不展示模型内部思考" in page.text
+    assert "message-meta" in (Path("app/web/static/app.js").read_text(encoding="utf-8"))
     tree = client.get("/api/workspace/tree")
     assert tree.status_code == 200
     assert tree.json()["entries"][0]["name"] == "demo.py"

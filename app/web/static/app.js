@@ -17,8 +17,11 @@ function addEvent(label, text, type = '') {
   if (welcome) welcome.remove();
   const el = document.createElement('div');
   el.className = `event ${type}`;
-  el.innerHTML = `<span class="event-label">${label}</span><div></div>`;
-  el.lastElementChild.textContent = text;
+  const isUser = type === 'user-question';
+  const identity = isUser ? '你' : 'ApexCode';
+  const displayLabel = isUser ? '你的提问' : label;
+  el.innerHTML = `<div class="message-meta"><span class="message-avatar">${identity[0]}</span><span class="event-label">${displayLabel}</span></div><div class="message-body"></div>`;
+  el.querySelector('.message-body').textContent = text;
   timeline.appendChild(el);
   timeline.scrollTop = timeline.scrollHeight;
 }
