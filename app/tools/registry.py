@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-import subprocess
+import difflib
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Awaitable, Callable
+
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from app.config import Settings
 from app.safety import SafetyError, safe_path, validate_command
@@ -17,11 +20,38 @@ Approval = Callable[[str, dict[str, Any]], Awaitable[bool]]
 class ToolContext:
     settings: Settings
     approve: Approval
+    cancel_event: asyncio.Event | None = None
+
+
+class _Args(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ListFilesArgs(_Args):
+    path: str = "."
+
+
+class ReadFileArgs(_Args):
+    path: str
+
+
+class SearchTextArgs(_Args):
+    query: str
+    path: str = "."
+
+
+class WriteFileArgs(_Args):
+    path: str
+    content: str
+
+
+class RunCommandArgs(_Args):
+    command: str
 
 
 class ToolRegistry:
-    def __init__(self, settings: Settings, approve: Approval) -> None:
-        self.context = ToolContext(settings, approve)
+    def __init__(self, settings: Settings, approve: Approval, cancel_event: asyncio.Event | None = None) -> None:
+        self.context = ToolContext(settings, approve, cancel_event)
         self._tools = {
             "list_files": self._list_files,
             "read_file": self._read_file,
@@ -29,6 +59,7 @@ class ToolRegistry:
             "write_file": self._write_file,
             "run_command": self._run_command,
         }
+        self._arg_models = {"list_files": ListFilesArgs, "read_file": ReadFileArgs, "search_text": SearchTextArgs, "write_file": WriteFileArgs, "run_command": RunCommandArgs}
 
     def schemas(self) -> list[dict[str, Any]]:
         return [
@@ -44,8 +75,10 @@ class ToolRegistry:
         if not fn:
             return {"ok": False, "error": f"未知工具：{name}"}
         try:
+            model = self._arg_models[name](**arguments)
+            arguments = model.model_dump()
             return await fn(arguments)
-        except (OSError, UnicodeError, SafetyError, ValueError) as exc:
+        except (OSError, UnicodeError, SafetyError, ValueError, TypeError, KeyError, ValidationError) as exc:
             return {"ok": False, "error": str(exc)}
 
     async def _list_files(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -91,7 +124,9 @@ class ToolRegistry:
         content = args["content"]
         if len(content.encode("utf-8")) > self.context.settings.max_file_bytes:
             raise ValueError("写入内容超过大小限制。")
-        allowed = await self.context.approve("write_file", {"path": str(path.relative_to(self.context.settings.workspace)), "content": content})
+        old = path.read_text(encoding="utf-8") if path.is_file() and path.stat().st_size <= self.context.settings.max_file_bytes else ""
+        diff = "".join(difflib.unified_diff(old.splitlines(keepends=True), content.splitlines(keepends=True), fromfile=str(path), tofile=str(path)))
+        allowed = await self.context.approve("write_file", {"path": str(path.relative_to(self.context.settings.workspace)), "content": content, "diff": diff[-12_000:]})
         if not allowed:
             return {"ok": False, "cancelled": True, "error": "用户拒绝了文件修改。"}
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -106,9 +141,25 @@ class ToolRegistry:
             return {"ok": False, "cancelled": True, "error": "用户拒绝了命令执行。"}
         proc = await asyncio.create_subprocess_shell(command, cwd=self.context.settings.workspace, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
         try:
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=self.context.settings.command_timeout)
+            deadline = time.monotonic() + self.context.settings.command_timeout
+            while True:
+                if self.context.cancel_event and self.context.cancel_event.is_set():
+                    proc.kill()
+                    await proc.communicate()
+                    return {"ok": False, "cancelled": True, "error": "任务已取消。"}
+                if time.monotonic() >= deadline:
+                    proc.kill()
+                    await proc.communicate()
+                    return {"ok": False, "error": "命令执行超时。", "timeout": True}
+                try:
+                    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=.5)
+                    break
+                except asyncio.TimeoutError:
+                    if proc.returncode is not None:
+                        stdout, stderr = await proc.communicate()
+                        break
         except asyncio.TimeoutError:
             proc.kill()
-            await proc.wait()
+            await proc.communicate()
             return {"ok": False, "error": "命令执行超时。", "timeout": True}
         return {"ok": proc.returncode == 0, "returncode": proc.returncode, "stdout": stdout.decode(errors="replace")[-8_000:], "stderr": stderr.decode(errors="replace")[-8_000:]}

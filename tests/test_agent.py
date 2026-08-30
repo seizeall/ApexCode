@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from app.agent.service import AgentService
+from app.agent.service import AgentService, trim_context
 from app.config import Settings
 
 
@@ -44,6 +44,14 @@ async def _approved(*_args):
 
 async def _collect(events, event):
     events.append(event)
+
+
+def test_trim_context_keeps_system_and_newest_messages() -> None:
+    messages = [{"role": "system", "content": "system"}] + [{"role": "user", "content": "x" * 20 + str(i)} for i in range(8)]
+    trimmed = trim_context(messages, 70)
+    assert trimmed[0]["role"] == "system"
+    assert trimmed[-1]["content"].endswith("7")
+    assert len(trimmed) < len(messages)
 
 
 @pytest.mark.asyncio

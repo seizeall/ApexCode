@@ -29,3 +29,24 @@ def test_web_rejects_unknown_mode(tmp_path: Path) -> None:
     session_id = client.post("/api/sessions").json()["session_id"]
     response = client.post(f"/api/sessions/{session_id}/messages", json={"prompt": "test", "mode": "unknown"})
     assert response.status_code == 400
+
+
+def test_web_exposes_cancel_endpoint(tmp_path: Path) -> None:
+    client = TestClient(create_app(Settings(workspace=tmp_path)))
+    session_id = client.post("/api/sessions").json()["session_id"]
+    # A cancel request is accepted even while the model task is still queued.
+    response = client.post(f"/api/sessions/{session_id}/messages", json={"prompt": "test", "mode": "plan"})
+    run_id = response.json()["run_id"]
+    assert client.post(f"/api/runs/{run_id}/cancel").status_code == 200
+    # Drain the event stream so the background task has a chance to clean up.
+    with client.stream("GET", f"/api/runs/{run_id}/events") as events:
+        assert any('"type": "done"' in line for line in events.iter_lines())
+
+
+def test_session_history_is_persisted(tmp_path: Path) -> None:
+    from app.session_store import SessionStore
+
+    store = SessionStore(tmp_path / "sessions.json")
+    import asyncio
+    asyncio.run(store.save("session-1", [{"role": "user", "content": "hello"}]))
+    assert asyncio.run(store.get("session-1"))[0]["content"] == "hello"

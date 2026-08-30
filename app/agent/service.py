@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -12,7 +13,29 @@ from app.tools.registry import ToolRegistry
 EventSink = Callable[[dict[str, Any]], Awaitable[None]]
 
 
+class AgentCancelled(RuntimeError):
+    """The user cancelled the current task."""
+
+
 SYSTEM_PROMPT = """你是一个运行在本机工作区内的编程助手。先理解任务，再用工具检查真实文件；不要猜测文件内容。\n只有在确实需要时才修改文件或执行命令。每次工具调用后检查结果，遇到错误要解释原因并调整方案。完成后用简洁中文说明改动、验证方式和仍需用户注意的事项。"""
+
+
+def trim_context(messages: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    """Keep the system prompt and newest conversation turns within a character budget."""
+    if sum(len(str(item.get("content", ""))) for item in messages) <= limit:
+        return messages
+    system = messages[:1] if messages and messages[0].get("role") == "system" else []
+    rest = messages[1:] if system else messages
+    kept: list[dict[str, Any]] = []
+    used = sum(len(str(item.get("content", ""))) for item in system)
+    for item in reversed(rest):
+        size = len(str(item.get("content", "")))
+        if kept and used + size > limit:
+            break
+        kept.append(item)
+        used += size
+    kept.reverse()
+    return system + kept
 
 
 class AgentService:
@@ -20,7 +43,7 @@ class AgentService:
         self.settings = settings
         self.model = model or OpenAICompatibleClient(settings)
 
-    async def run(self, prompt: str, approve: Callable[[str, dict[str, Any]], Awaitable[bool]], emit: EventSink, history: list[dict[str, Any]] | None = None, mode: str = "ask") -> tuple[str, list[dict[str, Any]]]:
+    async def run(self, prompt: str, approve: Callable[[str, dict[str, Any]], Awaitable[bool]], emit: EventSink, history: list[dict[str, Any]] | None = None, mode: str = "ask", cancel_event: asyncio.Event | None = None) -> tuple[str, list[dict[str, Any]]]:
         messages = list(history or [])
         mode = mode if mode in {"full", "plan", "ask"} else "ask"
         mode_prompt = SYSTEM_PROMPT
@@ -35,9 +58,10 @@ class AgentService:
         else:
             messages.insert(0, {"role": "system", "content": mode_prompt})
         messages.append({"role": "user", "content": prompt})
-        registry = ToolRegistry(self.settings, approve)
+        registry = ToolRegistry(self.settings, approve, cancel_event)
         if mode in {"plan", "ask"}:
             await emit({"type": "step", "step": 1, "message": "正在整理需求" if mode == "plan" else "正在确认需求"})
+            messages = trim_context(messages, self.settings.max_context_chars)
             try:
                 message = await self.model.complete(messages, [])
             except ModelError as exc:
@@ -48,7 +72,14 @@ class AgentService:
             await emit({"type": "assistant", "message": content})
             return content, messages
         for step in range(1, self.settings.max_steps + 1):
+            if cancel_event and cancel_event.is_set():
+                await emit({"type": "cancelled", "message": "任务已取消。"})
+                return "任务已取消。", messages
             await emit({"type": "step", "step": step, "message": f"正在处理第 {step} 轮"})
+            before_trim = len(messages)
+            messages = trim_context(messages, self.settings.max_context_chars)
+            if len(messages) < before_trim:
+                await emit({"type": "context_trimmed", "message": "历史消息较长，已保留最近上下文。"})
             try:
                 message = await self.model.complete(messages, registry.schemas())
             except ModelError as exc:
@@ -61,6 +92,9 @@ class AgentService:
             calls = message.get("tool_calls") or []
             if not calls:
                 return content or "模型没有返回文本结果。", messages
+            if len(calls) + sum(1 for message in messages if message.get("role") == "tool") > self.settings.max_tool_calls:
+                await emit({"type": "error", "message": "工具调用次数达到上限，任务已停止。"})
+                return "工具调用次数达到上限，任务已停止。", messages
             for call in calls:
                 fn = call.get("function", {})
                 name = fn.get("name", "")
@@ -73,5 +107,7 @@ class AgentService:
                     result = await registry.call(name, args)
                     await emit({"type": "tool_result", "tool": name, "result": result})
                 messages.append({"role": "tool", "tool_call_id": call.get("id", name), "content": json.dumps(result, ensure_ascii=False)})
+                if result.get("cancelled"):
+                    return result.get("error", "用户取消了操作。"), messages
         await emit({"type": "error", "message": "达到最大执行轮数，任务已停止。"})
         return "达到最大执行轮数，任务已停止。", messages

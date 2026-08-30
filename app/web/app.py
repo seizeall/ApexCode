@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,7 @@ from pydantic import BaseModel
 from app.agent.service import AgentService
 from app.config import Settings
 from app.tools.registry import ToolRegistry
+from app.session_store import SessionStore
 
 
 class MessageBody(BaseModel):
@@ -33,6 +35,8 @@ class RunState:
     approvals: dict[str, asyncio.Future[bool]] = field(default_factory=dict)
     status: str = "queued"
     history: list[dict[str, Any]] = field(default_factory=list)
+    cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
+    task: asyncio.Task[Any] | None = None
 
 
 async def _never_approve(*_args: Any) -> bool:
@@ -41,10 +45,20 @@ async def _never_approve(*_args: Any) -> bool:
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     cfg = settings or Settings.from_env()
-    app = FastAPI(title="ApexCode", docs_url="/api/docs")
     runs: dict[str, RunState] = {}
     sessions: dict[str, list[str]] = {}
     session_histories: dict[str, list[dict[str, Any]]] = {}
+    store = SessionStore(cfg.session_file)
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        for session_id, history_items in (await store.load()).items():
+            if isinstance(session_id, str) and isinstance(history_items, list):
+                sessions[session_id] = []
+                session_histories[session_id] = history_items
+        yield
+
+    app = FastAPI(title="ApexCode", docs_url="/api/docs", lifespan=lifespan)
 
     async def publish(run: RunState, event: dict[str, Any]) -> None:
         if event.get("type") == "error":
@@ -65,21 +79,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             run.approvals[approval_id] = future
             await publish(run, {"type": "approval_required", "approval_id": approval_id, "action": kind, "payload": payload})
             try:
-                return await asyncio.wait_for(future, timeout=300)
-            except asyncio.TimeoutError:
-                return False
+                while not future.done():
+                    if run.cancel_event.is_set():
+                        return False
+                    try:
+                        return await asyncio.wait_for(asyncio.shield(future), timeout=.5)
+                    except asyncio.TimeoutError:
+                        continue
+                return future.result()
             finally:
                 run.approvals.pop(approval_id, None)
 
         async def emit(event: dict[str, Any]) -> None:
             await publish(run, event)
 
-        result, run.history = await AgentService(cfg).run(prompt, approve, emit, session_histories.get(run.session_id), mode=mode)
-        session_histories[run.session_id] = run.history
-        failed = result.startswith(("模型请求失败", "未配置", "达到最大"))
-        run.status = "failed" if failed else "completed"
-        await publish(run, {"type": "done", "status": run.status, "message": result})
-        await run.queue.put(None)
+        try:
+            result, run.history = await AgentService(cfg).run(prompt, approve, emit, session_histories.get(run.session_id), mode=mode, cancel_event=run.cancel_event)
+            session_histories[run.session_id] = run.history
+            await store.save(run.session_id, run.history)
+            if run.cancel_event.is_set() or result == "任务已取消。":
+                run.status = "cancelled"
+            else:
+                failed = result.startswith(("模型请求失败", "未配置", "达到最大", "工具调用次数"))
+                run.status = "failed" if failed else "completed"
+        except asyncio.CancelledError:
+            run.cancel_event.set()
+            run.status = "cancelled"
+            result = "任务已取消。"
+        except Exception as exc:
+            run.status = "failed"
+            result = f"任务执行失败：{exc}"
+            await publish(run, {"type": "error", "message": result})
+        finally:
+            await publish(run, {"type": "done", "status": run.status, "message": result})
+            await run.queue.put(None)
 
     @app.get("/")
     async def index() -> FileResponse:
@@ -96,6 +129,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def config() -> dict[str, Any]:
         return {"workspace": str(cfg.workspace), "model": cfg.model, "configured": bool(cfg.api_key)}
 
+    @app.get("/api/sessions")
+    async def list_sessions() -> dict[str, Any]:
+        return {"sessions": [{"session_id": key, "message_count": len(value)} for key, value in session_histories.items()]}
+
     @app.get("/api/workspace/tree")
     async def tree(path: str = ".") -> dict[str, Any]:
         registry = ToolRegistry(cfg, _never_approve)
@@ -107,6 +144,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         sessions[session_id] = []
         session_histories[session_id] = []
         return {"session_id": session_id}
+
+    @app.get("/api/sessions/{session_id}/history")
+    async def history(session_id: str) -> dict[str, Any]:
+        if session_id not in sessions:
+            raise HTTPException(404, "会话不存在。")
+        return {"session_id": session_id, "messages": session_histories.get(session_id, [])}
 
     @app.post("/api/sessions/{session_id}/messages")
     async def send_message(session_id: str, body: MessageBody) -> dict[str, str]:
@@ -120,8 +163,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         run = RunState(run_id, session_id)
         runs[run_id] = run
         sessions[session_id].append(run_id)
-        asyncio.create_task(worker(run, body.prompt.strip(), body.mode))
+        run.task = asyncio.create_task(worker(run, body.prompt.strip(), body.mode))
         return {"run_id": run_id}
+
+    @app.post("/api/runs/{run_id}/cancel")
+    async def cancel(run_id: str) -> dict[str, bool]:
+        run = runs.get(run_id)
+        if not run:
+            raise HTTPException(404, "任务不存在。")
+        run.cancel_event.set()
+        return {"accepted": True}
 
     @app.get("/api/runs/{run_id}/events")
     async def events(run_id: str) -> StreamingResponse:

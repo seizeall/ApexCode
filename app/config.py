@@ -19,12 +19,17 @@ class Settings:
     max_steps: int = 12
     command_timeout: float = 30.0
     max_file_bytes: int = 512_000
+    max_context_chars: int = 80_000
+    model_retries: int = 2
+    max_tool_calls: int = 40
+    session_file: Path = Path.cwd() / ".apexcode" / "sessions.json"
 
     @classmethod
     def from_env(cls, workspace: str | Path | None = None) -> "Settings":
         if load_dotenv:
             load_dotenv()
         root = Path(workspace or os.getenv("CODING_AGENT_WORKSPACE", ".")).expanduser().resolve()
+        session_file = Path(os.getenv("CODING_AGENT_SESSION_FILE", str(root / ".apexcode" / "sessions.json"))).expanduser().resolve()
         return cls(
             api_key=os.getenv("CODING_AGENT_API_KEY", ""),
             base_url=os.getenv("CODING_AGENT_BASE_URL", cls.base_url).rstrip("/"),
@@ -32,4 +37,8 @@ class Settings:
             workspace=root,
             max_steps=int(os.getenv("CODING_AGENT_MAX_STEPS", cls.max_steps)),
             command_timeout=float(os.getenv("CODING_AGENT_COMMAND_TIMEOUT", cls.command_timeout)),
+            max_context_chars=int(os.getenv("CODING_AGENT_MAX_CONTEXT_CHARS", cls.max_context_chars)),
+            model_retries=int(os.getenv("CODING_AGENT_MODEL_RETRIES", cls.model_retries)),
+            max_tool_calls=int(os.getenv("CODING_AGENT_MAX_TOOL_CALLS", cls.max_tool_calls)),
+            session_file=session_file,
         )

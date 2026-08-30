@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import asyncio
 from typing import Any
 
 import httpx
@@ -29,19 +30,27 @@ class OpenAICompatibleClient:
         own_client = self._client is None
         client = self._client or httpx.AsyncClient(timeout=60)
         try:
-            response = await client.post(endpoint, json=payload, headers=headers)
-            response.raise_for_status()
-            data = response.json()
-            if "anthropic" in self.settings.base_url.lower():
-                return self._anthropic_response(data)
-            choices = data.get("choices") or []
-            if not choices or "message" not in choices[0]:
-                raise ModelError("模型响应缺少 choices.message。")
-            return choices[0]["message"]
-        except httpx.HTTPError as exc:
-            raise ModelError(f"模型请求失败：{exc}") from exc
-        except ValueError as exc:
-            raise ModelError("模型返回的不是有效 JSON。") from exc
+            last_error: Exception | None = None
+            for attempt in range(self.settings.model_retries + 1):
+                try:
+                    response = await client.post(endpoint, json=payload, headers=headers)
+                    response.raise_for_status()
+                    data = response.json()
+                    if "anthropic" in self.settings.base_url.lower():
+                        return self._anthropic_response(data)
+                    choices = data.get("choices") or []
+                    if not choices or not isinstance(choices[0].get("message"), dict):
+                        raise ModelError("模型响应缺少有效的 choices.message。")
+                    return choices[0]["message"]
+                except ModelError:
+                    raise
+                except (httpx.HTTPError, ValueError, TypeError) as exc:
+                    last_error = exc
+                    if attempt < self.settings.model_retries:
+                        await asyncio.sleep(min(2 ** attempt, 4))
+            if isinstance(last_error, ValueError):
+                raise ModelError("模型返回的不是有效 JSON。") from last_error
+            raise ModelError(f"模型请求失败：{last_error}") from last_error
         finally:
             if own_client:
                 await client.aclose()
@@ -78,6 +87,8 @@ class OpenAICompatibleClient:
         return payload, headers, endpoint
 
     def _anthropic_response(self, data: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(data, dict) or not isinstance(data.get("content"), list):
+            raise ModelError("Anthropic 响应缺少有效的 content。")
         content = data.get("content") or []
         text_parts = [block.get("text", "") for block in content if block.get("type") == "text"]
         calls = []

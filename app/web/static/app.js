@@ -80,6 +80,8 @@ function addEvent(label, text, type = '') {
 
 function setStatus(text, cls = 'idle') { $('run-status').textContent = text; $('run-status').className = `status-pill ${cls}`; }
 
+function setRunning(running) { $('cancel-run').classList.toggle('hidden', !running); }
+
 function detailLabel(event) {
   if (event.type === 'step') return {label: '工作阶段', text: event.message, tone: 'step'};
   if (event.type === 'tool_start') return {label: `调用工具 · ${event.tool}`, text: JSON.stringify(event.arguments, null, 2), tone: 'tool'};
@@ -129,7 +131,23 @@ async function newSession() {
   $('sessions').innerHTML = '<button class="session-item active">新会话<small>刚刚创建</small></button>';
   $('timeline').innerHTML = '<div class="welcome"><div class="welcome-icon">⌘</div><h2>从一个真实任务开始</h2><p>描述你希望完成的编程工作，Agent 会先检查工作区，再请求必要的操作确认。</p></div>';
   setStatus('待命');
+  setRunning(false);
   $('details-toggle').classList.add('hidden'); toggleDetails(false); renderDetails();
+}
+
+async function restoreSession(id) {
+  const data = await request(`/api/sessions/${id}/history`);
+  sessionId = id;
+  detailEvents = [];
+  $('timeline').innerHTML = '';
+  const visible = (data.messages || []).filter(message => (message.role === 'user' && message.content) || (message.role === 'assistant' && message.content));
+  if (!visible.length) {
+    $('timeline').innerHTML = '<div class="welcome"><div class="welcome-icon">⌘</div><h2>从一个真实任务开始</h2><p>描述你希望完成的编程工作，Agent 会先检查工作区，再请求必要的操作确认。</p></div>';
+  } else {
+    visible.forEach(message => addEvent(message.role === 'user' ? '你的提问' : '最终结果', message.content, message.role === 'user' ? 'user-question' : 'assistant'));
+  }
+  $('sessions').innerHTML = `<button class="session-item active">恢复的会话<small>${visible.length} 条消息</small></button>`;
+  setStatus('待命'); setRunning(false); $('details-toggle').classList.add('hidden'); toggleDetails(false); renderDetails();
 }
 
 async function sendPrompt(prompt) {
@@ -140,6 +158,7 @@ async function sendPrompt(prompt) {
   setStatus('处理中', 'running');
   const data = await request(`/api/sessions/${sessionId}/messages`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt, mode: selectedMode}) });
   currentRun = data.run_id;
+  setRunning(true);
   detailEvents = []; $('details-toggle').classList.remove('hidden'); renderDetails();
   const stream = new EventSource(`/api/runs/${currentRun}/events`);
   stream.onmessage = (message) => {
@@ -148,7 +167,7 @@ async function sendPrompt(prompt) {
     if (['step', 'tool_start', 'tool_result', 'approval_required', 'approval_auto'].includes(event.type)) { detailEvents.push(event); renderDetails(); }
     if (event.type === 'error') setStatus('执行失败', 'failed');
     if (event.type === 'approval_required') showApproval(event);
-    if (event.type === 'done') { addEvent('最终结果', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : '执行失败', event.status === 'completed' ? 'done' : 'failed'); stream.close(); loadTree(); }
+    if (event.type === 'done') { addEvent('最终结果', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : (event.status === 'cancelled' ? '已取消' : '执行失败'), event.status === 'completed' ? 'done' : 'failed'); setRunning(false); stream.close(); loadTree(); }
   };
   stream.onerror = () => { if (currentRun) setStatus('连接中断', 'failed'); stream.close(); };
 }
@@ -163,6 +182,7 @@ function showApproval(event) {
 
 async function init() {
   $('new-session').onclick = newSession; $('new-session-side').onclick = newSession; $('refresh-tree').onclick = loadTree;
+  $('cancel-run').onclick = async () => { if (currentRun) await request(`/api/runs/${currentRun}/cancel`, {method: 'POST'}); };
   $('details-toggle').onclick = () => toggleDetails(true); $('details-close').onclick = () => toggleDetails(false); $('details-backdrop').onclick = () => toggleDetails(false);
   $('composer').onsubmit = (e) => { e.preventDefault(); sendPrompt($('prompt').value); };
   $('prompt').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPrompt(e.target.value); } };
@@ -173,6 +193,11 @@ async function init() {
     $('mode-help').textContent = modeHelp[selectedMode];
   });
   try { const cfg = await request('/api/config'); $('workspace-label').textContent = cfg.workspace; $('connection').innerHTML = `<i></i>${cfg.configured ? '模型已配置' : '等待配置 API Key'}`; if (cfg.configured) $('connection').classList.add('ready'); } catch (error) { $('connection').textContent = '服务未连接'; }
-  await loadTree(); await newSession();
+  await loadTree();
+  try {
+    const saved = await request('/api/sessions');
+    const latest = saved.sessions?.[saved.sessions.length - 1];
+    if (latest) await restoreSession(latest.session_id); else await newSession();
+  } catch (error) { await newSession(); }
 }
 init();
