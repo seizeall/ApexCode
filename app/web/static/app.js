@@ -2,6 +2,7 @@ let sessionId = null;
 let currentRun = null;
 let selectedMode = 'ask';
 let detailEvents = [];
+let nameDialogResolve = null;
 const modeHelp = {full: '直接完成任务，安全边界仍然有效', ask: '先确认需求，再决定下一步', plan: '只生成执行计划，不修改工作区'};
 const $ = (id) => document.getElementById(id);
 
@@ -13,6 +14,11 @@ async function request(url, options) {
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
+}
+
+function formatBytes(bytes) {
+  if (bytes >= 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))} MB`;
+  return `${Math.round(bytes / 1024)} KB`;
 }
 
 function inlineMarkdown(value) {
@@ -82,12 +88,58 @@ function setStatus(text, cls = 'idle') { $('run-status').textContent = text; $('
 
 function setRunning(running) { $('cancel-run').classList.toggle('hidden', !running); }
 
+function setComposerBusy(busy) {
+  const button = $('send-button');
+  const textarea = $('prompt');
+  if (!button || !textarea) return;
+  button.disabled = busy;
+  button.classList.toggle('is-sending', busy);
+  button.querySelector('.send-label').textContent = busy ? '处理中' : '开始任务';
+  textarea.disabled = busy;
+}
+
+function renderInlineProcess() {
+  const panel = $('process-panel');
+  const list = $('process-list');
+  if (!panel || !list) return;
+  panel.classList.toggle('hidden', detailEvents.length === 0);
+  list.innerHTML = '';
+  detailEvents.forEach(event => {
+    const item = detailLabel(event);
+    if (!item) return;
+    const row = document.createElement('div');
+    row.className = `process-item ${item.tone}`;
+    row.innerHTML = '<span class="process-dot"></span><div><strong></strong><p></p></div>';
+    row.querySelector('strong').textContent = item.label;
+    const compact = item.text.length > 240 ? `${item.text.slice(0, 240)}…` : item.text;
+    row.querySelector('p').textContent = compact;
+    list.appendChild(row);
+  });
+}
+
+function renderSessions(items) {
+  const list = $('sessions');
+  list.innerHTML = '';
+  (items || []).forEach(item => {
+    const row = document.createElement('div');
+    row.className = `session-item ${item.session_id === sessionId ? 'active' : ''}`;
+    row.innerHTML = '<button class="session-open" type="button"><span class="session-title"></span><small></small></button><div class="session-actions"><button class="session-action rename" type="button" title="重命名会话" aria-label="重命名会话">✎</button><button class="session-action remove" type="button" title="删除会话" aria-label="删除会话">×</button></div>';
+    row.querySelector('.session-title').textContent = item.title || '新会话';
+    row.querySelector('small').textContent = `${item.message_count || 0} 条消息`;
+    row.querySelector('.session-open').onclick = () => restoreSession(item.session_id);
+    row.querySelector('.rename').onclick = () => renameSession(item);
+    row.querySelector('.remove').onclick = () => deleteSession(item);
+    list.appendChild(row);
+  });
+}
+
 function detailLabel(event) {
   if (event.type === 'step') return {label: '工作阶段', text: event.message, tone: 'step'};
   if (event.type === 'tool_start') return {label: `调用工具 · ${event.tool}`, text: JSON.stringify(event.arguments, null, 2), tone: 'tool'};
   if (event.type === 'tool_result') return {label: `工具返回 · ${event.tool}`, text: JSON.stringify(event.result, null, 2), tone: event.result?.ok === false ? 'error' : 'result'};
-  if (event.type === 'approval_required') return {label: '等待确认', text: event.action === 'write_file' ? '等待允许修改文件' : '等待允许执行命令', tone: 'approval'};
-  if (event.type === 'approval_auto') return {label: '自动确认', text: event.action === 'write_file' ? '完全模式已允许文件修改' : '完全模式已允许命令执行', tone: 'approval'};
+  if (event.type === 'approval_required') return {label: '等待确认', text: event.action === 'write_file' ? '等待允许修改文件' : (event.action === 'apply_patch' ? '等待允许应用文件补丁' : '等待允许执行命令'), tone: 'approval'};
+  if (event.type === 'approval_auto') return {label: '自动确认', text: event.action === 'write_file' ? '完全模式已允许文件修改' : (event.action === 'apply_patch' ? '完全模式已允许应用文件补丁' : '完全模式已允许命令执行'), tone: 'approval'};
+  if (event.type === 'error') return {label: '执行错误', text: event.message || '未知错误', tone: 'error'};
   return null;
 }
 
@@ -111,28 +163,35 @@ function toggleDetails(open) {
   $('details-drawer').setAttribute('aria-hidden', String(!open));
 }
 
-async function loadTree() {
-  try {
-    const data = await request('/api/workspace/tree');
-    $('workspace-path').textContent = data.path || '工作区';
-    const tree = $('file-tree'); tree.innerHTML = '';
-    (data.entries || []).forEach(item => {
-      const row = document.createElement('div'); row.className = `tree-item ${item.type === 'directory' ? 'dir' : ''}`;
-      row.innerHTML = `<span class="tree-icon">${item.type === 'directory' ? '▾' : '·'}</span><span></span>`;
-      row.lastElementChild.textContent = item.name; tree.appendChild(row);
-    });
-  } catch (error) { $('file-tree').innerHTML = `<div class="muted">${error.message}</div>`; }
+function openNameDialog({rename = false, value = ''} = {}) {
+  $('session-modal-title').textContent = rename ? '重命名会话' : '新建会话';
+  $('session-modal-submit').textContent = rename ? '保存名称' : '创建会话';
+  $('session-name').value = value;
+  $('session-name-error').textContent = '';
+  $('session-name')?.classList.remove('invalid');
+  $('session-modal').classList.remove('hidden');
+  $('session-name').focus();
+  return new Promise(resolve => { nameDialogResolve = resolve; });
 }
 
-async function newSession() {
-  const data = await request('/api/sessions', { method: 'POST' });
+function closeNameDialog(value = null) {
+  $('session-modal').classList.add('hidden');
+  if (nameDialogResolve) { const resolve = nameDialogResolve; nameDialogResolve = null; resolve(value); }
+}
+
+async function newSession(askForName = true) {
+  const name = askForName ? await openNameDialog() : '';
+  if (name === null) return;
+  const data = await request('/api/sessions', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name.trim()}) });
   sessionId = data.session_id;
   detailEvents = [];
-  $('sessions').innerHTML = '<button class="session-item active">新会话<small>刚刚创建</small></button>';
   $('timeline').innerHTML = '<div class="welcome"><div class="welcome-icon">⌘</div><h2>从一个真实任务开始</h2><p>描述你希望完成的编程工作，Agent 会先检查工作区，再请求必要的操作确认。</p></div>';
   setStatus('待命');
   setRunning(false);
+  setComposerBusy(false);
   $('details-toggle').classList.add('hidden'); toggleDetails(false); renderDetails();
+  renderInlineProcess();
+  await refreshSessions();
 }
 
 async function restoreSession(id) {
@@ -146,34 +205,90 @@ async function restoreSession(id) {
   } else {
     visible.forEach(message => addEvent(message.role === 'user' ? '你的提问' : '最终结果', message.content, message.role === 'user' ? 'user-question' : 'assistant'));
   }
-  $('sessions').innerHTML = `<button class="session-item active">恢复的会话<small>${visible.length} 条消息</small></button>`;
-  setStatus('待命'); setRunning(false); $('details-toggle').classList.add('hidden'); toggleDetails(false); renderDetails();
+  await refreshSessions();
+  setStatus('待命'); setRunning(false); setComposerBusy(false); $('details-toggle').classList.add('hidden'); toggleDetails(false); renderDetails(); renderInlineProcess();
 }
 
 async function sendPrompt(prompt) {
   if (!sessionId) await newSession();
   if (!prompt.trim()) return;
+  if (currentRun) {
+    const status = await request(`/api/runs/${currentRun}`).catch(() => null);
+    if (status && ['queued', 'running', 'waiting'].includes(status.status)) return;
+    currentRun = null;
+  }
   $('prompt').value = '';
   addEvent('你的提问', prompt, 'user-question');
   setStatus('处理中', 'running');
-  const data = await request(`/api/sessions/${sessionId}/messages`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt, mode: selectedMode}) });
+  setComposerBusy(true);
+  let data;
+  try {
+    data = await request(`/api/sessions/${sessionId}/messages`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt, mode: selectedMode}) });
+  } catch (error) {
+    addEvent('执行失败', error.message, 'error'); setStatus('执行失败', 'failed'); setRunning(false); setComposerBusy(false); return;
+  }
   currentRun = data.run_id;
   setRunning(true);
-  detailEvents = []; $('details-toggle').classList.remove('hidden'); renderDetails();
+  detailEvents = []; $('details-toggle').classList.remove('hidden'); renderDetails(); renderInlineProcess();
   const stream = new EventSource(`/api/runs/${currentRun}/events`);
   stream.onmessage = (message) => {
     const event = JSON.parse(message.data);
     if (event.type === 'status') return;
-    if (['step', 'tool_start', 'tool_result', 'approval_required', 'approval_auto'].includes(event.type)) { detailEvents.push(event); renderDetails(); }
+    if (['step', 'tool_start', 'tool_result', 'approval_required', 'approval_auto', 'error'].includes(event.type)) { detailEvents.push(event); renderDetails(); renderInlineProcess(); }
     if (event.type === 'error') setStatus('执行失败', 'failed');
-    if (event.type === 'approval_required') showApproval(event);
-    if (event.type === 'done') { addEvent('最终结果', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : (event.status === 'cancelled' ? '已取消' : '执行失败'), event.status === 'completed' ? 'done' : 'failed'); setRunning(false); stream.close(); loadTree(); }
+    if (event.type === 'approval_required') { setStatus('等待确认', 'waiting'); showApproval(event); }
+    if (event.type === 'done') { addEvent('最终结果', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : (event.status === 'cancelled' ? '已取消' : '执行失败'), event.status === 'completed' ? 'done' : 'failed'); setRunning(false); setComposerBusy(false); currentRun = null; stream.close(); refreshSessions(); }
   };
-  stream.onerror = () => { if (currentRun) setStatus('连接中断', 'failed'); stream.close(); };
+  stream.onerror = () => { if (currentRun) setStatus('连接中断', 'failed'); setComposerBusy(false); stream.close(); };
+}
+
+async function refreshSessions() {
+  try { renderSessions((await request('/api/sessions')).sessions); } catch (_) { /* 当前会话仍可继续使用 */ }
+}
+
+async function uploadFiles(input) {
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  const form = new FormData();
+  files.forEach(file => { form.append('files', file, file.name); form.append('paths', file.webkitRelativePath || file.name); });
+  try {
+    const result = await request('/api/workspace/upload', {method: 'POST', body: form});
+    const names = (result.files || []).map(item => item.path).join('、');
+    addEvent('上传完成', `已上传 ${result.files?.length || 0} 个文件：${names}`, 'assistant');
+  } catch (error) {
+    addEvent('上传失败', error.message, 'error');
+  } finally {
+    input.value = '';
+  }
+}
+
+async function renameSession(item) {
+  const current = item.name || item.title || '';
+  const name = await openNameDialog({rename: true, value: current});
+  if (name === null || !name.trim() || name.trim() === current) return;
+  try {
+    await request(`/api/sessions/${item.session_id}`, {method: 'PATCH', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name.trim()})});
+    await refreshSessions();
+  } catch (error) { addEvent('操作失败', error.message, 'error'); }
+}
+
+async function deleteSession(item) {
+  if (!window.confirm(`确定删除“${item.title || '新会话'}”吗？删除后无法恢复。`)) return;
+  try {
+    await request(`/api/sessions/${item.session_id}`, {method: 'DELETE'});
+    if (sessionId === item.session_id) {
+      sessionId = null;
+      currentRun = null;
+      const remaining = (await request('/api/sessions')).sessions || [];
+      if (remaining.length) await restoreSession(remaining[remaining.length - 1].session_id); else await newSession(false);
+    } else {
+      await refreshSessions();
+    }
+  } catch (error) { addEvent('操作失败', error.message, 'error'); }
 }
 
 function showApproval(event) {
-  $('approval-title').textContent = event.action === 'write_file' ? '准备修改文件' : '准备执行命令';
+  $('approval-title').textContent = event.action === 'write_file' ? '准备修改文件' : (event.action === 'apply_patch' ? '准备应用文件补丁' : '准备执行命令');
   $('approval-detail').textContent = JSON.stringify(event.payload, null, 2);
   $('approval-modal').classList.remove('hidden');
   const finish = async (allowed) => { $('approval-modal').classList.add('hidden'); await request(`/api/runs/${currentRun}/approvals/${event.approval_id}`, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({allowed})}); };
@@ -181,9 +296,21 @@ function showApproval(event) {
 }
 
 async function init() {
-  $('new-session').onclick = newSession; $('new-session-side').onclick = newSession; $('refresh-tree').onclick = loadTree;
+  $('new-session').onclick = () => newSession(true); $('new-session-side').onclick = () => newSession(true);
   $('cancel-run').onclick = async () => { if (currentRun) await request(`/api/runs/${currentRun}/cancel`, {method: 'POST'}); };
+  // Labels own the file-picker activation so it remains a trusted user gesture
+  // in browsers that block synthetic clicks on hidden file inputs.
+  $('file-upload').addEventListener('change', (event) => uploadFiles(event.currentTarget));
+  $('project-upload').addEventListener('change', (event) => uploadFiles(event.currentTarget));
   $('details-toggle').onclick = () => toggleDetails(true); $('details-close').onclick = () => toggleDetails(false); $('details-backdrop').onclick = () => toggleDetails(false);
+  $('session-modal-cancel').onclick = () => closeNameDialog();
+  $('session-modal-submit').onclick = () => {
+    const name = $('session-name').value.trim();
+    if (!name && $('session-modal-title').textContent === '重命名会话') { $('session-name-error').textContent = '名称不能为空'; $('session-name').focus(); return; }
+    closeNameDialog(name);
+  };
+  $('session-name').onkeydown = (event) => { if (event.key === 'Enter') $('session-modal-submit').click(); if (event.key === 'Escape') closeNameDialog(); };
+  $('session-modal').onclick = (event) => { if (event.target === $('session-modal')) closeNameDialog(); };
   $('composer').onsubmit = (e) => { e.preventDefault(); sendPrompt($('prompt').value); };
   $('prompt').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPrompt(e.target.value); } };
   document.querySelectorAll('[data-prompt]').forEach(button => button.onclick = () => sendPrompt(button.dataset.prompt));
@@ -192,12 +319,22 @@ async function init() {
     document.querySelectorAll('[data-mode]').forEach(item => item.classList.toggle('active', item === button));
     $('mode-help').textContent = modeHelp[selectedMode];
   });
-  try { const cfg = await request('/api/config'); $('workspace-label').textContent = cfg.workspace; $('connection').innerHTML = `<i></i>${cfg.configured ? '模型已配置' : '等待配置 API Key'}`; if (cfg.configured) $('connection').classList.add('ready'); } catch (error) { $('connection').textContent = '服务未连接'; }
-  await loadTree();
+  try {
+    const cfg = await request('/api/config');
+    $('workspace-label').textContent = cfg.workspace;
+    $('connection').innerHTML = `<i></i>${cfg.configured ? '模型已配置' : '等待配置 API Key'}`;
+    if (cfg.configured) $('connection').classList.add('ready');
+    const limits = cfg.upload_limits;
+    if (limits) {
+      $('upload-file-button').title = `上传文件（单个不超过 ${formatBytes(limits.max_file_bytes)}）`;
+      $('upload-project-button').title = `上传项目（单个文件不超过 ${formatBytes(limits.max_file_bytes)}，总量不超过 ${formatBytes(limits.max_total_bytes)}）`;
+    }
+  } catch (error) { $('connection').textContent = '服务未连接'; }
   try {
     const saved = await request('/api/sessions');
     const latest = saved.sessions?.[saved.sessions.length - 1];
-    if (latest) await restoreSession(latest.session_id); else await newSession();
+    if (latest) await restoreSession(latest.session_id); else await newSession(false);
+    renderSessions(saved.sessions);
   } catch (error) { await newSession(); }
 }
 init();

@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from app.config import Settings
-from app.model.client import ModelError, OpenAICompatibleClient
+from app.model.client import ModelError, OpenAICompatibleClient, normalize_message
 from app.tools.registry import ToolRegistry
 
 
@@ -44,6 +44,8 @@ class AgentService:
         self.model = model or OpenAICompatibleClient(settings)
 
     async def run(self, prompt: str, approve: Callable[[str, dict[str, Any]], Awaitable[bool]], emit: EventSink, history: list[dict[str, Any]] | None = None, mode: str = "ask", cancel_event: asyncio.Event | None = None) -> tuple[str, list[dict[str, Any]]]:
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError("任务不能为空。")
         messages = list(history or [])
         mode = mode if mode in {"full", "plan", "ask"} else "ask"
         mode_prompt = SYSTEM_PROMPT
@@ -59,11 +61,12 @@ class AgentService:
             messages.insert(0, {"role": "system", "content": mode_prompt})
         messages.append({"role": "user", "content": prompt})
         registry = ToolRegistry(self.settings, approve, cancel_event)
+        tool_calls_used = sum(1 for item in messages if item.get("role") == "tool")
         if mode in {"plan", "ask"}:
             await emit({"type": "step", "step": 1, "message": "正在整理需求" if mode == "plan" else "正在确认需求"})
             messages = trim_context(messages, self.settings.max_context_chars)
             try:
-                message = await self.model.complete(messages, [])
+                message = normalize_message(await self.model.complete(messages, []))
             except ModelError as exc:
                 await emit({"type": "error", "message": str(exc)})
                 return str(exc), messages
@@ -81,7 +84,7 @@ class AgentService:
             if len(messages) < before_trim:
                 await emit({"type": "context_trimmed", "message": "历史消息较长，已保留最近上下文。"})
             try:
-                message = await self.model.complete(messages, registry.schemas())
+                message = normalize_message(await self.model.complete(messages, registry.schemas()))
             except ModelError as exc:
                 await emit({"type": "error", "message": str(exc)})
                 return str(exc), messages
@@ -92,21 +95,31 @@ class AgentService:
             calls = message.get("tool_calls") or []
             if not calls:
                 return content or "模型没有返回文本结果。", messages
-            if len(calls) + sum(1 for message in messages if message.get("role") == "tool") > self.settings.max_tool_calls:
+            if tool_calls_used + len(calls) > self.settings.max_tool_calls:
                 await emit({"type": "error", "message": "工具调用次数达到上限，任务已停止。"})
                 return "工具调用次数达到上限，任务已停止。", messages
             for call in calls:
                 fn = call.get("function", {})
                 name = fn.get("name", "")
+                if not name:
+                    result = {"ok": False, "error": "工具调用缺少名称。"}
+                    await emit({"type": "tool_result", "tool": "unknown", "result": result})
+                    messages.append({"role": "tool", "tool_call_id": call.get("id", "unknown"), "content": json.dumps(result, ensure_ascii=False)})
+                    tool_calls_used += 1
+                    continue
                 try:
-                    args = json.loads(fn.get("arguments") or "{}")
-                except json.JSONDecodeError:
+                    raw_args = fn.get("arguments") or "{}"
+                    args = raw_args if isinstance(raw_args, dict) else json.loads(raw_args)
+                    if not isinstance(args, dict):
+                        raise ValueError("工具参数必须是 JSON 对象。")
+                except (json.JSONDecodeError, TypeError, ValueError):
                     result = {"ok": False, "error": "工具参数不是有效 JSON。"}
                 else:
                     await emit({"type": "tool_start", "tool": name, "arguments": args})
-                    result = await registry.call(name, args)
-                    await emit({"type": "tool_result", "tool": name, "result": result})
+                result = await registry.call(name, args)
+                await emit({"type": "tool_result", "tool": name, "result": result})
                 messages.append({"role": "tool", "tool_call_id": call.get("id", name), "content": json.dumps(result, ensure_ascii=False)})
+                tool_calls_used += 1
                 if result.get("cancelled"):
                     return result.get("error", "用户取消了操作。"), messages
         await emit({"type": "error", "message": "达到最大执行轮数，任务已停止。"})

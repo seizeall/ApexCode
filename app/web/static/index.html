@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ApexCode</title>
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=20260831-upload-2">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div class="brand"><span class="brand-mark">A</span><div><strong>ApexCode</strong><small>本地开发工作台</small></div></div>
-      <div class="top-actions"><span id="connection" class="connection"><i></i>检查配置中</span><button id="cancel-run" class="button danger hidden" type="button">停止任务</button><button id="new-session" class="button ghost">新建会话</button></div>
+      <div class="top-actions"><span id="connection" class="connection"><i></i>检查配置中</span><button id="cancel-run" class="button danger hidden" type="button">停止任务</button><button id="new-session" class="button ghost" type="button">新建会话</button></div>
     </header>
     <main class="layout">
       <aside class="sidebar panel">
@@ -19,15 +19,11 @@
         <div class="sidebar-foot"><span class="status-dot"></span><span id="workspace-label">工作区加载中</span></div>
       </aside>
       <section class="conversation">
-        <div class="conversation-head"><div><span class="eyebrow">APEXCODE / WORKSPACE</span><h1>让 Agent 动手解决问题</h1><p class="head-note">从需求到验证，所有操作都在当前工作区完成。</p></div><div class="head-controls"><button id="details-toggle" class="details-button hidden" type="button"><span class="details-icon">⌁</span><span>查看执行详情</span></button><span id="run-status" class="status-pill idle">待命</span></div></div>
+        <div class="conversation-head"><div><span class="eyebrow">APEXCODE / SESSION</span><h1>让 Agent 动手解决问题</h1><p class="head-note">从需求到验证，所有操作都在当前工作区完成。</p></div><div class="head-controls"><button id="details-toggle" class="details-button hidden" type="button"><span class="details-icon">⌁</span><span>查看执行详情</span></button><span id="run-status" class="status-pill idle">待命</span></div></div>
         <div id="timeline" class="timeline"><div class="welcome"><div class="welcome-icon">⌘</div><h2>从一个真实任务开始</h2><p>描述你希望完成的编程工作，Agent 会先检查工作区，再请求必要的操作确认。</p><div class="suggestions"><button data-prompt="检查当前项目结构，并告诉我最值得先修复的问题">检查项目结构</button><button data-prompt="搜索项目中所有 TODO，并整理成清单">整理 TODO</button><button data-prompt="为当前项目补充一个最小的自动化测试">补充测试</button></div></div></div>
-        <form id="composer" class="composer"><textarea id="prompt" rows="2" placeholder="描述一个编程任务，例如：找出登录接口的错误处理问题并修复它"></textarea><div class="composer-foot"><div><div class="mode-switch" role="group" aria-label="运行模式"><button type="button" class="mode-option" data-mode="full"><span class="mode-mark">⚡</span>完全</button><button type="button" class="mode-option active" data-mode="ask"><span class="mode-mark">?</span>询问</button><button type="button" class="mode-option" data-mode="plan"><span class="mode-mark">≡</span>计划</button></div><span id="mode-help" class="mode-help">先确认需求，再决定下一步</span></div><button class="button primary" type="submit"><span>开始任务</span><span class="send-icon">↗</span></button></div></form>
+        <details id="process-panel" class="process-panel hidden"><summary><span class="process-summary-label">执行过程</span><span class="process-summary-note">可审计活动 · 点击展开</span><span class="process-chevron">⌄</span></summary><div id="process-list" class="process-list"></div></details>
+        <form id="composer" class="composer"><textarea id="prompt" rows="2" placeholder="描述一个编程任务，例如：找出登录接口的错误处理问题并修复它"></textarea><div class="composer-foot"><div class="composer-left"><div class="composer-tools" aria-label="上传内容"><label id="upload-file-button" class="tool-button" for="file-upload" title="上传文件"><span class="tool-icon">↥</span><span>文件</span></label><label id="upload-project-button" class="tool-button" for="project-upload" title="上传项目目录"><span class="tool-icon">▦</span><span>项目</span></label><input id="file-upload" class="file-input" type="file" multiple><input id="project-upload" class="file-input" type="file" webkitdirectory directory multiple></div><div><div class="mode-switch" role="group" aria-label="运行模式"><button type="button" class="mode-option" data-mode="full"><span class="mode-mark">⚡</span>完全</button><button type="button" class="mode-option active" data-mode="ask"><span class="mode-mark">?</span>询问</button><button type="button" class="mode-option" data-mode="plan"><span class="mode-mark">≡</span>计划</button></div><span id="mode-help" class="mode-help">先确认需求，再决定下一步</span></div></div><button id="send-button" class="button primary" type="submit"><span class="send-label">开始任务</span><span class="send-icon">↗</span></button></div></form>
       </section>
-      <aside class="inspector panel">
-        <div class="panel-heading"><span>工作区</span><button id="refresh-tree" class="icon-button" title="刷新文件树">↻</button></div>
-        <div class="workspace-path" id="workspace-path">加载中</div>
-        <div id="file-tree" class="file-tree"></div>
-      </aside>
     </main>
   </div>
   <div id="details-backdrop" class="details-backdrop hidden"></div>
@@ -37,6 +33,7 @@
     <div id="details-list" class="details-list"><div class="muted">完成一次任务后，这里会保留执行记录。</div></div>
   </aside>
   <div id="approval-modal" class="modal-backdrop hidden"><div class="modal"><div class="modal-kicker">需要你的确认</div><h2 id="approval-title">即将执行操作</h2><pre id="approval-detail"></pre><div class="modal-actions"><button id="approval-deny" class="button ghost">拒绝</button><button id="approval-allow" class="button primary">允许一次</button></div></div></div>
-  <script src="/static/app.js"></script>
+  <div id="session-modal" class="modal-backdrop hidden"><div class="modal session-modal"><div class="modal-kicker">会话设置</div><h2 id="session-modal-title">新建会话</h2><label class="session-name-label" for="session-name">会话名称</label><input id="session-name" class="session-name-input" maxlength="80" placeholder="例如：修复登录接口" autocomplete="off"><p id="session-name-error" class="session-name-error"></p><div class="modal-actions"><button id="session-modal-cancel" class="button ghost" type="button">取消</button><button id="session-modal-submit" class="button primary" type="button">创建会话</button></div></div></div>
+  <script src="/static/app.js?v=20260831-upload-2"></script>
 </body>
 </html>

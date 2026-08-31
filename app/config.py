@@ -18,11 +18,18 @@ class Settings:
     workspace: Path = Path.cwd()
     max_steps: int = 12
     command_timeout: float = 30.0
+    model_timeout: float = 60.0
     max_file_bytes: int = 512_000
+    max_upload_file_bytes: int = 10 * 1024 * 1024
+    max_upload_total_bytes: int = 100 * 1024 * 1024
     max_context_chars: int = 80_000
     model_retries: int = 2
     max_tool_calls: int = 40
-    session_file: Path = Path.cwd() / ".apexcode" / "sessions.json"
+    session_file: Path | None = None
+
+    def __post_init__(self) -> None:
+        if self.session_file is None:
+            object.__setattr__(self, "session_file", Path(self.workspace) / ".apexcode" / "sessions.json")
 
     @classmethod
     def from_env(cls, workspace: str | Path | None = None) -> "Settings":
@@ -37,6 +44,10 @@ class Settings:
             workspace=root,
             max_steps=int(os.getenv("CODING_AGENT_MAX_STEPS", cls.max_steps)),
             command_timeout=float(os.getenv("CODING_AGENT_COMMAND_TIMEOUT", cls.command_timeout)),
+            model_timeout=float(os.getenv("CODING_AGENT_MODEL_TIMEOUT", cls.model_timeout)),
+            max_file_bytes=int(os.getenv("CODING_AGENT_MAX_FILE_BYTES", cls.max_file_bytes)),
+            max_upload_file_bytes=int(os.getenv("CODING_AGENT_MAX_UPLOAD_FILE_BYTES", cls.max_upload_file_bytes)),
+            max_upload_total_bytes=int(os.getenv("CODING_AGENT_MAX_UPLOAD_TOTAL_BYTES", cls.max_upload_total_bytes)),
             max_context_chars=int(os.getenv("CODING_AGENT_MAX_CONTEXT_CHARS", cls.max_context_chars)),
             model_retries=int(os.getenv("CODING_AGENT_MODEL_RETRIES", cls.model_retries)),
             max_tool_calls=int(os.getenv("CODING_AGENT_MAX_TOOL_CALLS", cls.max_tool_calls)),
