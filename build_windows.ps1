@@ -16,6 +16,8 @@ Copy-Item "README.txt" (Join-Path $release "README.txt") -Force
 Copy-Item "API_CONFIG.md" (Join-Path $release "API_CONFIG.md") -Force
 Copy-Item "DEMO_GUIDE.md" (Join-Path $release "DEMO_GUIDE.md") -Force
 Copy-Item "ASSESSMENT_REPORT.md" (Join-Path $release "ASSESSMENT_REPORT.md") -Force
+Copy-Item "stop_apexcode.ps1" (Join-Path $release "stop_apexcode.ps1") -Force
+Copy-Item "Stop-ApexCode.cmd" (Join-Path $release "Stop-ApexCode.cmd") -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $release "workspace") | Out-Null
 $demoTarget = Join-Path $release "workspace\apex_flowboard"
 New-Item -ItemType Directory -Force -Path $demoTarget | Out-Null
@@ -48,7 +50,7 @@ Write-Host "[6/6] Creating the source ZIP..."
 & tar.exe -a -c -f "release\ApexCode-Source.zip" `
   --exclude="*/__pycache__/*" --exclude="*.pyc" --exclude=".pytest_cache/*" `
   app examples tests installer .env.example .gitignore pyproject.toml requirements.txt `
-  README.txt run_web.ps1 API_CONFIG.md DEMO_GUIDE.md ASSESSMENT_REPORT.md desktop_launcher.py build_windows.ps1
+  README.txt run_web.ps1 stop_apexcode.ps1 Stop-ApexCode.cmd API_CONFIG.md DEMO_GUIDE.md ASSESSMENT_REPORT.md desktop_launcher.py build_windows.ps1
 if ($LASTEXITCODE -ne 0) { throw "Could not create the source ZIP." }
 
 Write-Host "Portable app: $release\ApexCode.exe"
