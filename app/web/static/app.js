@@ -3,13 +3,17 @@ let currentRun = null;
 let selectedMode = 'ask';
 let detailEvents = [];
 let nameDialogResolve = null;
+let apiConfig = null;
 const modeHelp = {full: '直接完成任务，安全边界仍然有效', ask: '先确认需求，再决定下一步', plan: '只生成执行计划，不修改工作区'};
 const $ = (id) => document.getElementById(id);
 
 async function request(url, options) {
   const response = await fetch(url, options);
-  if (!response.ok) throw new Error((await response.text()) || `请求失败 (${response.status})`);
-  return response.json();
+  const text = await response.text();
+  let data;
+  try { data = JSON.parse(text); } catch (_) { data = {detail: text}; }
+  if (!response.ok) throw new Error(data.detail || `请求失败 (${response.status})`);
+  return data;
 }
 
 function escapeHtml(value) {
@@ -179,6 +183,68 @@ function closeNameDialog(value = null) {
   if (nameDialogResolve) { const resolve = nameDialogResolve; nameDialogResolve = null; resolve(value); }
 }
 
+function applyConfigStatus(config) {
+  apiConfig = config;
+  $('workspace-label').textContent = config.workspace || $('workspace-label').textContent;
+  $('connection').classList.toggle('ready', Boolean(config.configured));
+  $('connection').innerHTML = `<i></i>${config.configured ? '模型已配置' : '等待配置 API Key'}`;
+  const limits = config.upload_limits;
+  if (limits) {
+    $('upload-file-button').title = `上传文件（单个不超过 ${formatBytes(limits.max_file_bytes)}）`;
+    $('upload-project-button').title = `上传项目（单个文件不超过 ${formatBytes(limits.max_file_bytes)}，总量不超过 ${formatBytes(limits.max_total_bytes)}）`;
+  }
+}
+
+async function refreshConfig() {
+  const config = await request('/api/config');
+  applyConfigStatus(config);
+  return config;
+}
+
+async function openApiDialog() {
+  try {
+    const config = apiConfig || await refreshConfig();
+    $('api-base-url').value = config.base_url || '';
+    $('api-model').value = config.model || '';
+    $('api-key').value = '';
+    $('api-key').type = 'password';
+    $('api-config-state').textContent = config.configured ? 'API Key 已配置，留空将保留原密钥。' : '';
+    $('api-config-state').classList.toggle('success', Boolean(config.configured));
+    $('api-modal').classList.remove('hidden');
+    $('api-base-url').focus();
+  } catch (error) {
+    addEvent('配置读取失败', error.message, 'error');
+  }
+}
+
+function closeApiDialog() {
+  $('api-key').value = '';
+  $('api-modal').classList.add('hidden');
+}
+
+async function saveApiConfig() {
+  const button = $('api-modal-submit');
+  const state = $('api-config-state');
+  state.classList.remove('success');
+  state.textContent = '';
+  button.disabled = true;
+  button.textContent = '保存中';
+  try {
+    await request('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({base_url: $('api-base-url').value, api_key: $('api-key').value, model: $('api-model').value}),
+    });
+    await refreshConfig();
+    closeApiDialog();
+  } catch (error) {
+    state.textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = '保存配置';
+  }
+}
+
 async function newSession(askForName = true) {
   const name = askForName ? await openNameDialog() : '';
   if (name === null) return;
@@ -297,6 +363,14 @@ function showApproval(event) {
 
 async function init() {
   $('new-session').onclick = () => newSession(true); $('new-session-side').onclick = () => newSession(true);
+  $('api-settings').onclick = () => openApiDialog();
+  $('api-modal-cancel').onclick = () => closeApiDialog();
+  $('api-form').onsubmit = (event) => { event.preventDefault(); saveApiConfig(); };
+  $('api-modal').onclick = (event) => { if (event.target === $('api-modal')) closeApiDialog(); };
+  $('toggle-api-key').onclick = () => {
+    const keyInput = $('api-key');
+    keyInput.type = keyInput.type === 'password' ? 'text' : 'password';
+  };
   $('cancel-run').onclick = async () => { if (currentRun) await request(`/api/runs/${currentRun}/cancel`, {method: 'POST'}); };
   // Labels own the file-picker activation so it remains a trusted user gesture
   // in browsers that block synthetic clicks on hidden file inputs.
@@ -320,15 +394,7 @@ async function init() {
     $('mode-help').textContent = modeHelp[selectedMode];
   });
   try {
-    const cfg = await request('/api/config');
-    $('workspace-label').textContent = cfg.workspace;
-    $('connection').innerHTML = `<i></i>${cfg.configured ? '模型已配置' : '等待配置 API Key'}`;
-    if (cfg.configured) $('connection').classList.add('ready');
-    const limits = cfg.upload_limits;
-    if (limits) {
-      $('upload-file-button').title = `上传文件（单个不超过 ${formatBytes(limits.max_file_bytes)}）`;
-      $('upload-project-button').title = `上传项目（单个文件不超过 ${formatBytes(limits.max_file_bytes)}，总量不超过 ${formatBytes(limits.max_total_bytes)}）`;
-    }
+    await refreshConfig();
   } catch (error) { $('connection').textContent = '服务未连接'; }
   try {
     const saved = await request('/api/sessions');

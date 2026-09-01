@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Focus List</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="app">
+    <header class="hero"><div><p class="eyebrow">FOCUS LIST / DEMO</p><h1>今天，专注一件事。</h1><p class="subhead">一个无需后端的动态任务清单示例。</p></div><div class="progress-ring" aria-label="完成进度"><strong id="progress-value">0%</strong><span>完成</span></div></header>
+    <section class="composer" aria-label="新增任务"><input id="task-input" maxlength="120" placeholder="输入任务，按 Enter 添加"><button id="add-task" type="button">添加</button></section>
+    <nav class="filters" aria-label="任务筛选"><button class="filter active" data-filter="all">全部 <span id="count-all">0</span></button><button class="filter" data-filter="active">进行中 <span id="count-active">0</span></button><button class="filter" data-filter="done">已完成 <span id="count-done">0</span></button><button id="clear-done" class="clear" type="button">清除已完成</button></nav>
+    <ul id="task-list" class="task-list" aria-live="polite"></ul>
+    <p id="empty-state" class="empty">还没有任务，先写下今天最重要的一件事。</p>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -4,13 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ApexCode</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260831-upload-2">
+  <link rel="stylesheet" href="/static/styles.css?v=20260901-api-config">
 </head>
 <body>
   <div class="app-shell">
     <header class="topbar">
       <div class="brand"><span class="brand-mark">A</span><div><strong>ApexCode</strong><small>本地开发工作台</small></div></div>
-      <div class="top-actions"><span id="connection" class="connection"><i></i>检查配置中</span><button id="cancel-run" class="button danger hidden" type="button">停止任务</button><button id="new-session" class="button ghost" type="button">新建会话</button></div>
+      <div class="top-actions"><span id="connection" class="connection"><i></i>检查配置中</span><button id="api-settings" class="button ghost api-settings-button" type="button" title="配置模型 API"><span aria-hidden="true">⚙</span><span>API 配置</span></button><button id="cancel-run" class="button danger hidden" type="button">停止任务</button><button id="new-session" class="button ghost" type="button">新建会话</button></div>
     </header>
     <main class="layout">
       <aside class="sidebar panel">
@@ -34,6 +34,7 @@
   </aside>
   <div id="approval-modal" class="modal-backdrop hidden"><div class="modal"><div class="modal-kicker">需要你的确认</div><h2 id="approval-title">即将执行操作</h2><pre id="approval-detail"></pre><div class="modal-actions"><button id="approval-deny" class="button ghost">拒绝</button><button id="approval-allow" class="button primary">允许一次</button></div></div></div>
   <div id="session-modal" class="modal-backdrop hidden"><div class="modal session-modal"><div class="modal-kicker">会话设置</div><h2 id="session-modal-title">新建会话</h2><label class="session-name-label" for="session-name">会话名称</label><input id="session-name" class="session-name-input" maxlength="80" placeholder="例如：修复登录接口" autocomplete="off"><p id="session-name-error" class="session-name-error"></p><div class="modal-actions"><button id="session-modal-cancel" class="button ghost" type="button">取消</button><button id="session-modal-submit" class="button primary" type="button">创建会话</button></div></div></div>
-  <script src="/static/app.js?v=20260831-upload-2"></script>
+  <div id="api-modal" class="modal-backdrop hidden"><form id="api-form" class="modal api-modal"><div class="modal-kicker">模型连接</div><h2>配置 API</h2><label class="config-label" for="api-base-url">API_BASE_URL</label><input id="api-base-url" class="config-input" type="url" required autocomplete="url" placeholder="https://api.openai.com/v1"><label class="config-label" for="api-key">API_KEY</label><div class="secret-field"><input id="api-key" class="config-input" type="password" autocomplete="off" placeholder="已配置时留空可保留原密钥"><button id="toggle-api-key" class="secret-toggle" type="button" title="显示或隐藏 API Key" aria-label="显示或隐藏 API Key">◉</button></div><label class="config-label" for="api-model">MODEL_NAME</label><input id="api-model" class="config-input" required autocomplete="off" placeholder="gpt-4o-mini"><p id="api-config-state" class="config-state"></p><div class="modal-actions"><button id="api-modal-cancel" class="button ghost" type="button">取消</button><button id="api-modal-submit" class="button primary" type="submit">保存配置</button></div></form></div>
+  <script src="/static/app.js?v=20260901-api-config"></script>
 </body>
 </html>

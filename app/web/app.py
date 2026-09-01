@@ -7,10 +7,12 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
+from dotenv import set_key
 
 from app.agent.service import AgentService
 from app.config import Settings
@@ -34,6 +36,32 @@ class SessionUpdateBody(BaseModel):
 
 class SessionCreateBody(BaseModel):
     name: str = ""
+
+
+class ConfigUpdateBody(BaseModel):
+    base_url: str = Field(min_length=1, max_length=500)
+    api_key: str = Field(default="", max_length=1000)
+    model: str = Field(min_length=1, max_length=200)
+
+    @field_validator("base_url", "api_key", "model", mode="before")
+    @classmethod
+    def strip_values(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, value: str) -> str:
+        parsed = urlparse(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("API Base URL 必须是有效的 http 或 https 地址。")
+        return value.rstrip("/")
+
+    @field_validator("model")
+    @classmethod
+    def validate_model(cls, value: str) -> str:
+        if not value or any(char in value for char in "\r\n"):
+            raise ValueError("模型名称不能为空或包含换行。")
+        return value
 
 
 @dataclass
@@ -145,6 +173,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {
             "workspace": str(cfg.workspace),
             "model": cfg.model,
+            "base_url": cfg.base_url,
             "configured": bool(cfg.api_key),
             "upload_limits": {
                 "max_files": 200,
@@ -152,6 +181,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "max_total_bytes": cfg.max_upload_total_bytes,
             },
         }
+
+    @app.post("/api/config")
+    async def update_config(body: ConfigUpdateBody) -> dict[str, Any]:
+        nonlocal cfg
+        api_key = body.api_key or cfg.api_key
+        if not api_key:
+            raise HTTPException(400, "首次配置必须填写 API Key。")
+        config_file = Path(cfg.config_file or (cfg.workspace / ".env"))
+        try:
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            config_file.touch(exist_ok=True)
+            set_key(str(config_file), "CODING_AGENT_API_KEY", api_key, quote_mode="always")
+            set_key(str(config_file), "CODING_AGENT_BASE_URL", body.base_url, quote_mode="always")
+            set_key(str(config_file), "CODING_AGENT_MODEL", body.model, quote_mode="always")
+        except OSError as exc:
+            raise HTTPException(500, f"无法保存 API 配置：{exc}") from exc
+        from dataclasses import replace
+        cfg = replace(cfg, api_key=api_key, base_url=body.base_url, model=body.model, config_file=config_file)
+        return {"configured": True, "base_url": cfg.base_url, "model": cfg.model}
 
     @app.get("/api/sessions")
     async def list_sessions() -> dict[str, Any]:

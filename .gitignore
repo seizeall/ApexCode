@@ -10,3 +10,7 @@ tmp/
 *.egg-info/
 *.pdf
 .apexcode/
+build/
+dist/
+release/
+*.spec

@@ -20,6 +20,8 @@ def test_web_serves_workbench_without_workspace_sidebar(tmp_path: Path) -> None:
     assert 'id="process-panel"' in page.text
     assert 'id="upload-file-button"' in page.text
     assert 'id="upload-project-button"' in page.text
+    assert 'id="api-settings"' in page.text
+    assert 'id="api-base-url"' in page.text
     composer_start = page.text.index('id="composer"')
     assert page.text.index('id="upload-file-button"') > composer_start
     assert page.text.index('id="upload-project-button"') > composer_start
@@ -117,6 +119,25 @@ def test_workspace_upload_uses_dedicated_upload_limits(tmp_path: Path) -> None:
     assert accepted.status_code == 200
     rejected = client.post("/api/workspace/upload", files=[("files", ("large.png", b"123456789", "image/png"))])
     assert rejected.status_code == 413
+
+
+def test_api_config_can_be_saved_without_exposing_key(tmp_path: Path) -> None:
+    config_file = tmp_path / ".env"
+    client = TestClient(create_app(Settings(workspace=tmp_path, config_file=config_file)))
+    response = client.post("/api/config", json={"base_url": "https://gateway.example/v1/", "api_key": "secret-test-key", "model": "tool-model"})
+    assert response.status_code == 200
+    assert response.json() == {"configured": True, "base_url": "https://gateway.example/v1", "model": "tool-model"}
+    public_config = client.get("/api/config").json()
+    assert public_config["configured"] is True
+    assert "api_key" not in public_config and "secret-test-key" not in str(public_config)
+    saved = config_file.read_text(encoding="utf-8")
+    assert "CODING_AGENT_API_KEY='secret-test-key'" in saved
+
+
+def test_api_config_requires_valid_url_and_initial_key(tmp_path: Path) -> None:
+    client = TestClient(create_app(Settings(workspace=tmp_path, config_file=tmp_path / ".env")))
+    assert client.post("/api/config", json={"base_url": "not-a-url", "api_key": "key", "model": "model"}).status_code == 422
+    assert client.post("/api/config", json={"base_url": "https://example.test/v1", "api_key": "", "model": "model"}).status_code == 400
 
 
 def test_session_name_is_persisted_in_metadata(tmp_path: Path) -> None:

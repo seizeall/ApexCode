@@ -1,15 +1,9 @@
-ApexCode 是一个本地优先的编程智能体。它通过兼容接口理解任务，在限定工作区内读取文件、搜索文本、修改文件和运行开发命令；有副作用的操作会先等待确认。CLI 与网页使用同一套 Agent 核心。
+Git 仓库：https://github.com/seizeall/ApexCode
 
-安装：
-1. Python 3.10+ 创建虚拟环境：python -m venv .venv；Windows 激活：.venv\\Scripts\\Activate.ps1
-2. 安装依赖：pip install -r requirements.txt
-3. 复制 .env.example 为 .env，或设置 CODING_AGENT_API_KEY、CODING_AGENT_BASE_URL、CODING_AGENT_MODEL、CODING_AGENT_WORKSPACE。
+ApexCode 是一个本地优先的编程智能体。它通过 OpenAI 兼容或 Anthropic Messages 兼容接口理解任务，在限定工作区内列目录、读取和搜索文件、写入文件、应用补丁、运行命令，并用 SSE 网页实时展示可审计过程。Agent 循环、上下文裁剪、工具定义、模型响应解析、取消、超时、错误处理和危险命令拦截均由本项目自行实现，不使用 LangChain、OpenAI Agents SDK、Code Interpreter 或 Files API。
 
-运行 CLI：python -m app.cli --mode ask "检查 examples/demo_project 并整理 TODO"
-模式：`ask` 先让模型确认需求；`plan` 只输出执行计划，不使用本地工具；`full` 在工作区和危险命令拦截仍有效的前提下自动完成，不逐次询问确认。
-运行网页：python -m uvicorn app.web.app:app --host 127.0.0.1 --port 8000，然后打开 http://127.0.0.1:8000
-测试：pytest
+源码运行：Python 3.10+；`pip install -r requirements.txt`；复制 `.env.example` 为 `.env` 后执行 `python -m uvicorn app.web.app:app --host 127.0.0.1 --port 8000`，浏览器打开 http://127.0.0.1:8000；测试命令为 `pytest`。
 
-项目不使用 Agent 框架或托管执行工具。模型只负责提出计划和工具调用，本地服务负责路径校验、确认、执行和错误回传。可用工具包括列目录、读文件、文本搜索、写文件、应用 unified diff 补丁和运行命令；当前版本不提供删除文件工具。网页支持上传单个文件或整个项目目录，上传内容只会写入当前工作区；默认单个上传文件不超过 10 MB、单次总量不超过 100 MB，最多 200 个文件，可通过 `CODING_AGENT_MAX_UPLOAD_FILE_BYTES` 和 `CODING_AGENT_MAX_UPLOAD_TOTAL_BYTES` 调整。图片会按二进制文件保存，当前模型工具不会直接解析图片内容。网页任务状态通过 SSE 实时更新，执行详情默认收起；对话区提供可展开的执行过程摘要，不展示模型内部思考。会话支持新建、重命名、删除和历史恢复。
+Windows 交付：执行 `powershell -ExecutionPolicy Bypass -File build_windows.ps1`，生成安装包 `release/ApexCode-Setup.exe`、便携包及源码包。安装版无需管理员权限，安装后打开生成的 `.env` 填写 API key，再从桌面启动；便携版将 `.env.example` 复制为 `.env` 后双击 exe。完整 API 字段和 HTTP 接口见 `API_CONFIG.md`，两分钟演示脚本见 `DEMO_GUIDE.md`。
 
-工程边界：会话历史保存到工作区下被忽略的 .apexcode/sessions.json；上下文超过 80000 字符时保留最近消息；模型请求默认最多重试 2 次，单个任务最多 12 轮、40 次工具调用。网页提供停止任务按钮，取消会终止正在等待或运行中的本地命令。真实密钥只从环境变量或未入库的 .env 读取。
+安全边界：真实密钥只从 `.env` 或环境变量读取；路径不能逃逸工作区；不提供删除文件工具；写文件、补丁和命令在询问模式需确认；完全模式也会拦截危险命令。会话历史保存到 `.apexcode/sessions.json`。
