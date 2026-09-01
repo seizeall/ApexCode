@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import socket
 import sys
 import threading
 import webbrowser
@@ -21,6 +22,18 @@ def bundle_root() -> Path:
     return Path(__file__).resolve().parent
 
 
+def available_port(preferred: int, attempts: int = 100) -> int:
+    """Select the preferred localhost port or the next available one."""
+    for port in range(preferred, min(preferred + attempts, 65_536)):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            try:
+                probe.bind(("127.0.0.1", port))
+            except OSError:
+                continue
+            return port
+    raise OSError(f"端口 {preferred} 之后没有可用端口。")
+
+
 def main() -> None:
     root = bundle_root()
     os.chdir(root)
@@ -31,9 +44,10 @@ def main() -> None:
     workspace.mkdir(parents=True, exist_ok=True)
     settings = replace(configured, workspace=workspace, session_file=workspace / ".apexcode" / "sessions.json", config_file=root / ".env")
     application = create_app(settings)
-    port = int(os.getenv("CODING_AGENT_PORT", "8000"))
-    if not 1 <= port <= 65535:
+    preferred_port = int(os.getenv("CODING_AGENT_PORT", "8000"))
+    if not 1 <= preferred_port <= 65535:
         raise ValueError("CODING_AGENT_PORT 必须在 1 到 65535 之间。")
+    port = available_port(preferred_port)
     url = f"http://127.0.0.1:{port}"
     threading.Timer(1.2, lambda: webbrowser.open(url)).start()
     print(f"ApexCode 已启动：{url}")

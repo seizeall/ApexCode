@@ -1,24 +1,32 @@
-# 构建演示脚本（2 分钟内）
+# Apex Flowboard 构建演示
 
 ## 演示目标
 
-展示 Agent 如何读取真实项目、规划修改、调用本地工具生成动态前端，并通过测试验证结果。整个过程在当前工作区执行，模型只负责决策，文件和命令由本地工具完成。
+展示 Agent 如何先规划、再调用本地工具构建完整动态前端，最后通过内置预览器完成验收。整个过程在当前工作区执行，计划文件、页面代码和验证结果均可检查。
 
 ## 推荐演示
 
-1. 双击 `ApexCode.exe`，确认顶部显示“已连接”或先打开配置说明。
-2. 新建会话，选择“计划”模式，输入：
+## 演示步骤
 
-   `检查 examples/demo_project，规划一个动态任务清单网页，说明要新增哪些 HTML、CSS、JS 文件以及验证方式。`
+1. 启动 ApexCode，确认工作区为项目根目录。
+2. 新建会话，选择“计划”模式，输入以下提示词：
 
-3. 切换“完全”模式，输入：
+   `在 examples/demo_project/apex_flowboard 中规划一个完整的动态项目执行看板。先创建详细的 PLAN.md，说明用户场景、信息架构、数据结构、核心交互、响应式策略、实施阶段和验收标准；计划模式只写计划，不实现网页。`
 
-   `在 examples/demo_project/frontend_demo 中创建一个无需后端即可运行的动态任务清单网页：支持新增、完成切换、删除、筛选和 localStorage 持久化；写完后运行可行的检查命令并总结。`
+3. 打开生成的 `examples/demo_project/apex_flowboard/PLAN.md`，确认计划包含明确的完成标准。
+4. 切换“完全”模式，输入以下提示词：
 
-4. 展开“执行过程”，展示 `list_files`、`read_file`、`write_file`/`apply_patch`、`run_command` 事件；如使用“询问”模式，展示写入前的确认弹窗。
-5. 打开生成的 `examples/demo_project/frontend_demo/index.html`，现场新增任务、筛选和刷新页面，证明状态持久化。
-6. 回到 Agent 输入：`运行项目测试并报告结果`，展示最终测试输出。
+   `严格按照 examples/demo_project/apex_flowboard/PLAN.md 一步一步完成网站构建。实现任务新建、编辑、删除、状态推进、组合筛选、实时统计、活动记录和 localStorage 持久化；完成桌面与移动端验证，修复发现的问题并总结结果。`
+
+5. 展开“执行过程”，查看读取文件、写入补丁、运行检查和阶段进度事件。
+6. 点击顶部“预览网站”，候选入口默认选择 `examples/demo_project/apex_flowboard/index.html`。
+7. 现场新建任务、切换筛选、推进状态并点击刷新，证明统计联动和状态持久化。
+8. 缩窄窗口检查单列移动布局，再回到 Agent 查看测试与验收总结。
 
 ## 讲解重点
 
-Agent 循环由 `app/agent/service.py` 自行实现；工具定义和执行在 `app/tools/registry.py`；路径校验和危险命令拦截在 `app/safety.py`；模型返回会在 `app/model/client.py` 统一解析；网页通过 SSE 实时显示可审计事件。没有使用 LangChain、OpenAI Agents SDK、Code Interpreter 或 Files API。
+- Plan 模式先产生可审计的 `PLAN.md`，Full 模式按计划执行本地工具。
+- 任务数据和活动记录保存在浏览器 `localStorage`，无需后端即可动态运行。
+- Agent 循环在 `app/agent/service.py`，工具定义与执行在 `app/tools/registry.py`。
+- 路径校验和危险命令拦截在 `app/safety.py`，模型输出在 `app/model/client.py` 统一解析。
+- SSE 持续输出进度与工具事件，最终成果可直接在隔离的内置预览器中运行。

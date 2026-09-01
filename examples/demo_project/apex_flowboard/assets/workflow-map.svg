@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="260" viewBox="0 0 720 260" role="img" aria-labelledby="title desc">
+  <title id="title">Agent workflow map</title>
+  <desc id="desc">Four connected stages represent plan, build, verify, and deliver.</desc>
+  <rect width="720" height="260" rx="8" fill="#15252b"/>
+  <g fill="none" stroke="#446068" stroke-width="2">
+    <path d="M153 130h54"/><path d="M333 130h54"/><path d="M513 130h54"/>
+  </g>
+  <g fill="#9eb3b8"><path d="m201 124 10 6-10 6z"/><path d="m381 124 10 6-10 6z"/><path d="m561 124 10 6-10 6z"/></g>
+  <g font-family="Arial, sans-serif" text-anchor="middle">
+    <g><rect x="35" y="78" width="118" height="104" rx="6" fill="#21363d" stroke="#3f5961"/><circle cx="94" cy="112" r="17" fill="#d7a63c"/><path d="m86 112 6 6 11-14" fill="none" stroke="#15252b" stroke-width="4"/><text x="94" y="151" fill="#fff" font-size="16">PLAN</text><text x="94" y="168" fill="#9eb3b8" font-size="10">SCOPE</text></g>
+    <g><rect x="215" y="78" width="118" height="104" rx="6" fill="#21363d" stroke="#3f5961"/><circle cx="274" cy="112" r="17" fill="#4a91bd"/><path d="M264 112h20M274 102v20" stroke="#15252b" stroke-width="4"/><text x="274" y="151" fill="#fff" font-size="16">BUILD</text><text x="274" y="168" fill="#9eb3b8" font-size="10">TOOLS</text></g>
+    <g><rect x="395" y="78" width="118" height="104" rx="6" fill="#21363d" stroke="#3f5961"/><circle cx="454" cy="112" r="17" fill="#58a47d"/><path d="m446 112 6 6 11-14" fill="none" stroke="#15252b" stroke-width="4"/><text x="454" y="151" fill="#fff" font-size="16">VERIFY</text><text x="454" y="168" fill="#9eb3b8" font-size="10">TESTS</text></g>
+    <g><rect x="575" y="78" width="110" height="104" rx="6" fill="#21363d" stroke="#3f5961"/><circle cx="630" cy="112" r="17" fill="#e6ecee"/><path d="M620 112h20m-6-6 6 6-6 6" fill="none" stroke="#15252b" stroke-width="4"/><text x="630" y="151" fill="#fff" font-size="16">SHIP</text><text x="630" y="168" fill="#9eb3b8" font-size="10">RESULT</text></g>
+  </g>
+</svg>

@@ -17,6 +17,9 @@ Copy-Item "API_CONFIG.md" (Join-Path $release "API_CONFIG.md") -Force
 Copy-Item "DEMO_GUIDE.md" (Join-Path $release "DEMO_GUIDE.md") -Force
 Copy-Item "ASSESSMENT_REPORT.md" (Join-Path $release "ASSESSMENT_REPORT.md") -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $release "workspace") | Out-Null
+$demoTarget = Join-Path $release "workspace\apex_flowboard"
+New-Item -ItemType Directory -Force -Path $demoTarget | Out-Null
+Copy-Item "examples\demo_project\apex_flowboard\*" $demoTarget -Recurse -Force
 
 Write-Host "[4/6] Building the click-to-install package..."
 $root = (Get-Location).Path

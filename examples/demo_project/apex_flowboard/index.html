@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Apex Flowboard - 可离线运行的动态项目执行看板">
+  <title>Apex Flowboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#main-content" aria-label="Apex Flowboard 首页">
+      <span class="brand-mark" aria-hidden="true">A</span>
+      <span><strong>Apex Flowboard</strong><small>LOCAL AGENT WORKSPACE</small></span>
+    </a>
+    <div class="topbar-actions">
+      <span class="local-status"><i aria-hidden="true"></i>本地数据已连接</span>
+      <time id="current-date"></time>
+      <button class="button button-primary" id="new-task-button" type="button"><span aria-hidden="true">＋</span>新建任务</button>
+    </div>
+  </header>
+
+  <main id="main-content" class="workspace">
+    <section class="project-head" aria-labelledby="project-title">
+      <div class="project-copy">
+        <p class="eyebrow">CURRENT PROJECT / 01</p>
+        <h1 id="project-title">Agent 产品演示站</h1>
+        <p>把需求转化为计划、代码与可验证成果，所有变更均保存在当前浏览器。</p>
+      </div>
+      <div class="phase-strip" aria-label="项目阶段">
+        <span class="phase is-done"><b>01</b>计划</span>
+        <span class="phase is-active"><b>02</b>构建</span>
+        <span class="phase"><b>03</b>验证</span>
+        <span class="phase"><b>04</b>交付</span>
+      </div>
+      <div class="completion" aria-label="项目完成度">
+        <div><span>整体完成度</span><strong id="completion-value">0%</strong></div>
+        <div class="progress-track"><span id="completion-bar"></span></div>
+      </div>
+    </section>
+
+    <section class="metrics" aria-label="项目指标">
+      <article><span>任务总数</span><strong id="metric-total">0</strong><small>当前工作流</small></article>
+      <article><span>执行中</span><strong id="metric-active">0</strong><small>正在推进</small></article>
+      <article><span>已完成</span><strong id="metric-done">0</strong><small>通过验收</small></article>
+      <article><span>临近截止</span><strong id="metric-due">0</strong><small>未来三天</small></article>
+    </section>
+
+    <section class="control-bar" aria-label="筛选任务">
+      <label class="search-field">
+        <span aria-hidden="true">⌕</span>
+        <span class="sr-only">搜索任务</span>
+        <input id="search-input" type="search" placeholder="搜索任务、说明或负责人" autocomplete="off">
+      </label>
+      <label><span class="sr-only">按优先级筛选</span><select id="priority-filter"><option value="all">全部优先级</option><option value="high">高优先级</option><option value="medium">中优先级</option><option value="low">低优先级</option></select></label>
+      <label><span class="sr-only">按状态筛选</span><select id="status-filter"><option value="all">全部状态</option><option value="planned">待规划</option><option value="active">执行中</option><option value="done">已完成</option></select></label>
+      <button id="reset-button" class="button button-quiet" type="button" title="恢复预置任务"><span aria-hidden="true">↻</span>恢复演示数据</button>
+    </section>
+
+    <section class="board" aria-label="任务看板">
+      <section class="board-column" data-status="planned">
+        <header><span class="status-dot planned"></span><h2>待规划</h2><b id="count-planned">0</b></header>
+        <div id="list-planned" class="task-list"></div>
+      </section>
+      <section class="board-column" data-status="active">
+        <header><span class="status-dot active"></span><h2>执行中</h2><b id="count-active">0</b></header>
+        <div id="list-active" class="task-list"></div>
+      </section>
+      <section class="board-column" data-status="done">
+        <header><span class="status-dot done"></span><h2>已完成</h2><b id="count-done">0</b></header>
+        <div id="list-done" class="task-list"></div>
+      </section>
+    </section>
+
+    <section class="lower-grid">
+      <section class="activity-panel" aria-labelledby="activity-title">
+        <header><div><p class="eyebrow">AUDIT TRAIL</p><h2 id="activity-title">最近动态</h2></div><span id="activity-count"></span></header>
+        <ol id="activity-list" class="activity-list"></ol>
+      </section>
+      <aside class="workflow-panel" aria-labelledby="workflow-title">
+        <div><p class="eyebrow">AGENT LOOP</p><h2 id="workflow-title">从意图到交付</h2><p>计划明确边界，工具执行变更，验证结果决定循环是否结束。</p></div>
+        <img src="assets/workflow-map.svg" alt="计划、构建、验证和交付组成的 Agent 工作流">
+        <dl><div><dt>执行环境</dt><dd>本地工作区</dd></div><div><dt>数据策略</dt><dd>浏览器持久化</dd></div></dl>
+      </aside>
+    </section>
+  </main>
+
+  <dialog id="task-dialog" class="task-dialog">
+    <form id="task-form" method="dialog" novalidate>
+      <header><div><p class="eyebrow">TASK EDITOR</p><h2 id="dialog-title">新建任务</h2></div><button id="close-dialog" class="icon-button" type="button" aria-label="关闭弹窗" title="关闭">×</button></header>
+      <input id="task-id" type="hidden">
+      <label class="field field-wide"><span>任务标题 *</span><input id="task-title" name="title" maxlength="80" required placeholder="例如：完成移动端适配"><small class="field-error" id="title-error"></small></label>
+      <label class="field field-wide"><span>任务说明</span><textarea id="task-description" name="description" rows="3" maxlength="240" placeholder="补充验收范围与关键细节"></textarea></label>
+      <div class="form-grid">
+        <label class="field"><span>负责人</span><input id="task-owner" name="owner" maxlength="24" placeholder="例如：前端组"></label>
+        <label class="field"><span>截止日期 *</span><input id="task-due" name="dueDate" type="date" required><small class="field-error" id="due-error"></small></label>
+        <label class="field"><span>优先级</span><select id="task-priority" name="priority"><option value="high">高</option><option value="medium" selected>中</option><option value="low">低</option></select></label>
+        <label class="field"><span>状态</span><select id="task-status" name="status"><option value="planned">待规划</option><option value="active">执行中</option><option value="done">已完成</option></select></label>
+      </div>
+      <footer><button id="cancel-dialog" class="button button-quiet" type="button">取消</button><button class="button button-primary" type="submit">保存任务</button></footer>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <noscript>此演示需要启用 JavaScript 才能使用任务管理功能。</noscript>
+  <script src="app.js"></script>
+</body>
+</html>

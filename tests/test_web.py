@@ -40,6 +40,9 @@ def test_web_serves_workbench_without_workspace_sidebar(tmp_path: Path) -> None:
 
 def test_preview_finds_build_output_and_serves_assets_safely(tmp_path: Path) -> None:
     (tmp_path / "index.html").write_text("<h1>root</h1>", encoding="utf-8")
+    internal = tmp_path / "app" / "web" / "static"
+    internal.mkdir(parents=True)
+    (internal / "index.html").write_text("<h1>workbench</h1>", encoding="utf-8")
     site = tmp_path / "website"
     (site / "dist").mkdir(parents=True)
     (site / "index.html").write_text("<h1>source</h1>", encoding="utf-8")
@@ -50,6 +53,7 @@ def test_preview_finds_build_output_and_serves_assets_safely(tmp_path: Path) -> 
 
     candidates = client.get("/api/preview/candidates").json()["candidates"]
     assert candidates[0]["path"] == "website/dist/index.html"
+    assert "app/web/static/index.html" not in {item["path"] for item in candidates}
     assert client.get(candidates[0]["url"]).text.endswith("<h1>built</h1>")
     assert client.get("/preview/website/dist/app.css").text == "body { color: green; }"
     assert client.get("/preview/.env").status_code == 404

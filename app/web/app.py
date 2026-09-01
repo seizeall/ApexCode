@@ -23,6 +23,7 @@ from app.safety import safe_path, SafetyError
 
 
 PREVIEW_EXCLUDED_DIRS = {".git", ".venv", "node_modules", "__pycache__", "tmp"}
+PREVIEW_INTERNAL_ENTRIES = {"app/web/static/index.html"}
 PREVIEW_FILE_SUFFIXES = {
     ".css", ".gif", ".html", ".ico", ".jpeg", ".jpg", ".js", ".json", ".map",
     ".mjs", ".mp4", ".png", ".svg", ".ttf", ".txt", ".wasm", ".webm",
@@ -53,6 +54,8 @@ def preview_candidates(workspace: Path) -> list[dict[str, str]]:
     candidates = []
     for path in sorted(found, key=priority):
         relative = path.relative_to(root).as_posix()
+        if relative in PREVIEW_INTERNAL_ENTRIES:
+            continue
         candidates.append({"path": relative, "url": f"/preview/{quote(relative, safe='/')}"})
     return candidates
 
