@@ -1,6 +1,6 @@
 Git 仓库：https://github.com/seizeall/ApexCode
 
-ApexCode 是一个本地优先的编程智能体。它通过 OpenAI 兼容或 Anthropic Messages 兼容接口理解任务，在限定工作区内列目录、读取和搜索文件、写入文件、应用补丁、运行命令，并用 SSE 网页实时展示可审计过程。Agent 循环、上下文裁剪、工具定义、模型响应解析、取消、超时、错误处理和危险命令拦截均由本项目自行实现，不使用 LangChain、OpenAI Agents SDK、Code Interpreter 或 Files API。
+ApexCode 是一个本地优先的编程智能体。它通过 OpenAI 兼容或 Anthropic Messages 兼容接口理解任务，在限定工作区内列目录、读取和搜索文件、写入文件、应用补丁、运行命令，并用 SSE 网页实时展示阶段进度和精简后的可审计过程。工作区生成 index.html 或前端构建产物后，可以点击顶部“预览网站”在应用内直接渲染。Agent 循环、上下文裁剪、工具定义、模型响应解析、取消、超时、错误处理和危险命令拦截均由本项目自行实现，不使用 LangChain、OpenAI Agents SDK、Code Interpreter 或 Files API。
 
 源码运行：Python 3.10+；`pip install -r requirements.txt`；复制 `.env.example` 为 `.env` 后执行 `python -m uvicorn app.web.app:app --host 127.0.0.1 --port 8000`，浏览器打开 http://127.0.0.1:8000；测试命令为 `pytest`。
 

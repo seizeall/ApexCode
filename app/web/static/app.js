@@ -4,7 +4,10 @@ let selectedMode = 'ask';
 let detailEvents = [];
 let nameDialogResolve = null;
 let apiConfig = null;
+let previewCandidates = [];
+let currentPreviewUrl = '';
 const modeHelp = {full: '直接完成任务，安全边界仍然有效', ask: '先确认需求，再决定下一步', plan: '只生成执行计划，不修改工作区'};
+const toolNames = {list_files: '列出文件', read_file: '读取文件', search_text: '搜索文本', write_file: '写入文件', apply_patch: '应用补丁', run_command: '执行命令'};
 const $ = (id) => document.getElementById(id);
 
 async function request(url, options) {
@@ -90,6 +93,12 @@ function addEvent(label, text, type = '') {
 
 function setStatus(text, cls = 'idle') { $('run-status').textContent = text; $('run-status').className = `status-pill ${cls}`; }
 
+function setLiveProgress(text = '') {
+  $('live-progress').classList.toggle('hidden', !text);
+  const compact = String(text).replace(/\s+/g, ' ').trim();
+  $('live-progress-text').textContent = compact.length > 180 ? `${compact.slice(0, 180)}…` : compact;
+}
+
 function setRunning(running) { $('cancel-run').classList.toggle('hidden', !running); }
 
 function setComposerBusy(busy) {
@@ -139,13 +148,36 @@ function renderSessions(items) {
 
 function detailLabel(event) {
   if (event.type === 'step') return {label: '工作阶段', text: event.message, tone: 'step'};
-  if (event.type === 'assistant') return {label: '模型工作摘要', text: event.message || '模型正在继续处理任务。', tone: 'step'};
-  if (event.type === 'tool_start') return {label: `调用工具 · ${event.tool}`, text: JSON.stringify(event.arguments, null, 2), tone: 'tool'};
-  if (event.type === 'tool_result') return {label: `工具返回 · ${event.tool}`, text: JSON.stringify(event.result, null, 2), tone: event.result?.ok === false ? 'error' : 'result'};
+  if (event.type === 'assistant') return {label: '模型工作摘要', text: String(event.message || '模型正在继续处理任务。').slice(0, 800), tone: 'step'};
+  if (event.type === 'tool_start') return {label: toolNames[event.tool] || event.tool, text: summarizeToolArguments(event), tone: 'tool'};
+  if (event.type === 'tool_result') return {label: `${toolNames[event.tool] || event.tool}完成`, text: summarizeToolResult(event), tone: event.result?.ok === false ? 'error' : 'result'};
   if (event.type === 'approval_required') return {label: '等待确认', text: event.action === 'write_file' ? '等待允许修改文件' : (event.action === 'apply_patch' ? '等待允许应用文件补丁' : '等待允许执行命令'), tone: 'approval'};
   if (event.type === 'approval_auto') return {label: '自动确认', text: event.action === 'write_file' ? '完全模式已允许文件修改' : (event.action === 'apply_patch' ? '完全模式已允许应用文件补丁' : '完全模式已允许命令执行'), tone: 'approval'};
   if (event.type === 'error') return {label: '执行错误', text: event.message || '未知错误', tone: 'error'};
   return null;
+}
+
+function summarizeToolArguments(event) {
+  const args = event.arguments || {};
+  if (event.tool === 'write_file') return `${args.path || '文件'} · ${args.content_bytes || 0} 字节`;
+  if (event.tool === 'apply_patch') return `${(args.files || []).join('、') || '文件补丁'} · ${args.patch_bytes || 0} 字节`;
+  if (event.tool === 'run_command') return String(args.command || '').slice(0, 300);
+  return [args.path, args.query].filter(Boolean).join(' · ') || '正在执行';
+}
+
+function summarizeToolResult(event) {
+  const result = event.result || {};
+  if (!result.ok) return result.error || '执行失败';
+  if (event.tool === 'list_files') return `已找到 ${result.entry_count || 0} 项`;
+  if (event.tool === 'read_file') return `已读取 ${result.path || '文件'} · ${result.content_chars || 0} 字符`;
+  if (event.tool === 'search_text') return `已找到 ${result.hit_count || 0} 处匹配${result.truncated ? '（结果已截断）' : ''}`;
+  if (event.tool === 'write_file') return `已写入 ${result.path || '文件'} · ${result.bytes || 0} 字节`;
+  if (event.tool === 'apply_patch') return `已更新 ${(result.files || []).length} 个文件`;
+  if (event.tool === 'run_command') {
+    const tail = result.stderr_tail || result.stdout_tail || '';
+    return `返回码 ${result.returncode ?? 0}${tail ? ` · ${tail.slice(-300)}` : ''}`;
+  }
+  return '执行成功';
 }
 
 function renderDetails() {
@@ -196,6 +228,57 @@ function applyConfigStatus(config) {
   }
 }
 
+async function refreshPreviewCandidates() {
+  const data = await request('/api/preview/candidates');
+  previewCandidates = data.candidates || [];
+  const launch = $('preview-launch');
+  launch.disabled = previewCandidates.length === 0;
+  launch.title = previewCandidates.length ? `预览 ${previewCandidates[0].path}` : '当前工作区还没有 index.html';
+  const select = $('preview-select');
+  const selectedPath = select.value;
+  select.innerHTML = '';
+  previewCandidates.forEach(candidate => {
+    const option = document.createElement('option');
+    option.value = candidate.path;
+    option.textContent = candidate.path;
+    select.appendChild(option);
+  });
+  if (previewCandidates.some(candidate => candidate.path === selectedPath)) select.value = selectedPath;
+  return previewCandidates;
+}
+
+function loadPreview(path) {
+  const candidate = previewCandidates.find(item => item.path === path) || previewCandidates[0];
+  if (!candidate) return;
+  currentPreviewUrl = candidate.url;
+  $('preview-select').value = candidate.path;
+  $('preview-state').textContent = `正在加载 · ${candidate.path}`;
+  const isolatedUrl = new URL(candidate.url, window.location.href);
+  isolatedUrl.hostname = 'localhost';
+  isolatedUrl.searchParams.set('preview', Date.now());
+  $('preview-frame').src = isolatedUrl.toString();
+}
+
+async function openPreview() {
+  try {
+    await refreshPreviewCandidates();
+    if (!previewCandidates.length) {
+      addEvent('暂时无法预览', '当前工作区没有找到 index.html。让 Agent 构建网站后再试。', 'error');
+      return;
+    }
+    $('preview-backdrop').classList.remove('hidden');
+    loadPreview($('preview-select').value);
+  } catch (error) {
+    addEvent('预览失败', error.message, 'error');
+  }
+}
+
+function closePreview() {
+  $('preview-backdrop').classList.add('hidden');
+  $('preview-frame').src = 'about:blank';
+  currentPreviewUrl = '';
+}
+
 async function refreshConfig() {
   const config = await request('/api/config');
   applyConfigStatus(config);
@@ -238,6 +321,8 @@ async function saveApiConfig() {
       body: JSON.stringify({base_url: $('api-base-url').value, api_key: $('api-key').value, model: $('api-model').value, workspace: $('agent-workspace').value}),
     });
     await refreshConfig();
+    closePreview();
+    await refreshPreviewCandidates();
     closeApiDialog();
   } catch (error) {
     state.textContent = error.message;
@@ -255,6 +340,7 @@ async function newSession(askForName = true) {
   detailEvents = [];
   $('timeline').innerHTML = '<div class="welcome"><div class="welcome-icon">⌘</div><h2>从一个真实任务开始</h2><p>描述你希望完成的编程工作，Agent 会先检查工作区，再请求必要的操作确认。</p></div>';
   setStatus('待命');
+  setLiveProgress();
   setRunning(false);
   setComposerBusy(false);
   $('details-toggle').classList.add('hidden'); toggleDetails(false); renderDetails();
@@ -275,6 +361,7 @@ async function restoreSession(id) {
   }
   await refreshSessions();
   setStatus('待命'); setRunning(false); setComposerBusy(false); $('details-toggle').classList.add('hidden'); toggleDetails(false); renderDetails(); renderInlineProcess();
+  setLiveProgress();
 }
 
 async function sendPrompt(prompt) {
@@ -288,6 +375,7 @@ async function sendPrompt(prompt) {
   $('prompt').value = '';
   addEvent('你的提问', prompt, 'user-question');
   setStatus('处理中', 'running');
+  setLiveProgress('正在创建任务');
   setComposerBusy(true);
   let data;
   try {
@@ -303,9 +391,13 @@ async function sendPrompt(prompt) {
     const event = JSON.parse(message.data);
     if (event.type === 'status') return;
     if (['step', 'assistant', 'tool_start', 'tool_result', 'approval_required', 'approval_auto', 'error'].includes(event.type)) { detailEvents.push(event); renderDetails(); renderInlineProcess(); }
+    if (event.type === 'progress') { setLiveProgress(`${event.message} · 已用时 ${event.elapsed_seconds} 秒`); setStatus(`${event.elapsed_seconds} 秒`, 'running'); }
+    if (event.type === 'step' || event.type === 'assistant') setLiveProgress(event.message || '模型正在继续处理任务');
+    if (event.type === 'tool_start') setLiveProgress(`正在${toolNames[event.tool] || '调用工具'}`);
+    if (event.type === 'tool_result') setLiveProgress(summarizeToolResult(event));
     if (event.type === 'error') setStatus('执行失败', 'failed');
-    if (event.type === 'approval_required') { setStatus('等待确认', 'waiting'); showApproval(event); }
-    if (event.type === 'done') { addEvent('最终结果', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : (event.status === 'cancelled' ? '已取消' : '执行失败'), event.status === 'completed' ? 'done' : 'failed'); setRunning(false); setComposerBusy(false); currentRun = null; stream.close(); refreshSessions(); }
+    if (event.type === 'approval_required') { setStatus('等待确认', 'waiting'); setLiveProgress('等待你的确认'); showApproval(event); }
+    if (event.type === 'done') { addEvent('最终结果', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : (event.status === 'cancelled' ? '已取消' : '执行失败'), event.status === 'completed' ? 'done' : 'failed'); setLiveProgress(); setRunning(false); setComposerBusy(false); currentRun = null; stream.close(); refreshSessions(); refreshPreviewCandidates().catch(() => {}); }
   };
   stream.onerror = () => { if (currentRun) setStatus('连接中断', 'failed'); setComposerBusy(false); stream.close(); };
 }
@@ -365,6 +457,12 @@ function showApproval(event) {
 
 async function init() {
   $('new-session').onclick = () => newSession(true); $('new-session-side').onclick = () => newSession(true);
+  $('preview-launch').onclick = () => openPreview();
+  $('preview-close').onclick = () => closePreview();
+  $('preview-refresh').onclick = () => { if (currentPreviewUrl) loadPreview($('preview-select').value); };
+  $('preview-select').onchange = () => loadPreview($('preview-select').value);
+  $('preview-frame').onload = () => { if (currentPreviewUrl) $('preview-state').textContent = $('preview-select').value; };
+  $('preview-backdrop').onclick = (event) => { if (event.target === $('preview-backdrop')) closePreview(); };
   $('api-settings').onclick = () => openApiDialog();
   $('api-modal-cancel').onclick = () => closeApiDialog();
   $('api-form').onsubmit = (event) => { event.preventDefault(); saveApiConfig(); };
@@ -397,6 +495,7 @@ async function init() {
   });
   try {
     await refreshConfig();
+    await refreshPreviewCandidates();
   } catch (error) { $('connection').textContent = '服务未连接'; }
   try {
     const saved = await request('/api/sessions');

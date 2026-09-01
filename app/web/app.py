@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from dotenv import set_key
 
@@ -19,6 +20,49 @@ from app.config import Settings
 from app.tools.registry import ToolRegistry
 from app.session_store import SessionStore
 from app.safety import safe_path, SafetyError
+
+
+PREVIEW_EXCLUDED_DIRS = {".git", ".venv", "node_modules", "__pycache__", "tmp"}
+PREVIEW_FILE_SUFFIXES = {
+    ".css", ".gif", ".html", ".ico", ".jpeg", ".jpg", ".js", ".json", ".map",
+    ".mjs", ".mp4", ".png", ".svg", ".ttf", ".txt", ".wasm", ".webm",
+    ".webmanifest", ".woff", ".woff2", ".xml",
+}
+
+
+def preview_candidates(workspace: Path) -> list[dict[str, str]]:
+    """Find renderable HTML entry points without traversing dependency or hidden trees."""
+    root = workspace.resolve()
+    found: list[Path] = []
+    if not root.is_dir():
+        return []
+    for directory, dirnames, filenames in os.walk(root):
+        dirnames[:] = [name for name in dirnames if name not in PREVIEW_EXCLUDED_DIRS and not name.startswith(".")]
+        if "index.html" in filenames:
+            found.append(Path(directory) / "index.html")
+            if len(found) >= 50:
+                break
+
+    def priority(path: Path) -> tuple[int, int, str]:
+        relative = path.relative_to(root)
+        parent_name = relative.parent.name.lower()
+        build_rank = {"dist": 0, "build": 1, "out": 2, "public": 3}.get(parent_name, 4)
+        root_rank = 0 if relative.as_posix() == "index.html" else 1
+        return (build_rank, root_rank, relative.as_posix().lower())
+
+    candidates = []
+    for path in sorted(found, key=priority):
+        relative = path.relative_to(root).as_posix()
+        candidates.append({"path": relative, "url": f"/preview/{quote(relative, safe='/')}"})
+    return candidates
+
+
+def preview_file_allowed(workspace: Path, target: Path) -> bool:
+    relative = target.relative_to(workspace.resolve())
+    return (
+        target.suffix.lower() in PREVIEW_FILE_SUFFIXES
+        and not any(part.startswith(".") or part in PREVIEW_EXCLUDED_DIRS for part in relative.parts)
+    )
 
 
 class MessageBody(BaseModel):
@@ -107,6 +151,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="ApexCode", docs_url="/api/docs", lifespan=lifespan)
 
+    @app.middleware("http")
+    async def isolate_preview_origin(request: Request, call_next):
+        # The embedded renderer uses localhost while the workbench uses 127.0.0.1.
+        # Keep generated page scripts away from Agent management APIs.
+        if request.url.hostname == "localhost" and request.url.path.startswith("/api"):
+            return JSONResponse({"detail": "预览页面不能访问 Agent 管理接口。"}, status_code=403)
+        return await call_next(request)
+
     async def publish(run: RunState, event: dict[str, Any]) -> None:
         if event.get("type") == "error":
             run.status = "failed"
@@ -175,6 +227,33 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if not path.is_file():
             raise HTTPException(404, "静态文件不存在。")
         return FileResponse(path)
+
+    @app.get("/api/preview/candidates")
+    async def list_preview_candidates() -> dict[str, Any]:
+        return {"ok": True, "candidates": preview_candidates(cfg.workspace)}
+
+    @app.get("/preview", include_in_schema=False)
+    @app.get("/preview/", include_in_schema=False)
+    async def preview_default() -> RedirectResponse:
+        candidates = preview_candidates(cfg.workspace)
+        if not candidates:
+            raise HTTPException(404, "当前工作区没有可预览的 index.html。")
+        return RedirectResponse(candidates[0]["url"])
+
+    @app.get("/preview/{path:path}", include_in_schema=False)
+    async def preview_file(path: str) -> FileResponse:
+        try:
+            target = safe_path(cfg.workspace, path)
+            if target.is_dir():
+                target = safe_path(cfg.workspace, str(Path(path) / "index.html"))
+            if not target.is_file() or not preview_file_allowed(cfg.workspace, target):
+                raise ValueError("预览资源不存在或不允许访问。")
+            roots = [(cfg.workspace / item["path"]).resolve().parent for item in preview_candidates(cfg.workspace)]
+            if not any(target == root or root in target.parents for root in roots):
+                raise ValueError("资源不属于可预览的网站目录。")
+        except (OSError, SafetyError, ValueError):
+            raise HTTPException(404, "预览资源不存在或不允许访问。") from None
+        return FileResponse(target, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
 
     @app.get("/api/config")
     async def config() -> dict[str, Any]:

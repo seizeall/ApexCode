@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import json
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, TypeVar
 
 from app.config import Settings
 from app.model.client import ModelError, OpenAICompatibleClient, normalize_message
@@ -17,7 +18,66 @@ class AgentCancelled(RuntimeError):
     """The user cancelled the current task."""
 
 
-SYSTEM_PROMPT = """你是一个运行在本机工作区内的编程助手。先理解任务，再用工具检查真实文件；不要猜测文件内容。\n只有在确实需要时才修改文件或执行命令。工具调用前可以输出简短、可审计的工作摘要，只陈述当前目标、关键决定和下一步，不输出逐字内部推理。每次工具调用后检查结果，遇到错误要解释原因并调整方案。完成后用简洁中文说明改动、验证方式和仍需用户注意的事项。"""
+SYSTEM_PROMPT = """你是一个运行在本机工作区内的编程助手。先理解任务，再用工具检查真实文件；不要猜测文件内容。\n只有在确实需要时才修改文件或执行命令。工具调用前可以输出不超过 80 字的可审计的工作摘要，只陈述当前目标、关键决定和下一步，不输出逐字内部推理。每次工具调用后检查结果，遇到错误要解释原因并调整方案。完成后用简洁中文说明改动、验证方式和仍需用户注意的事项，不复述大段文件内容或命令输出。"""
+
+
+T = TypeVar("T")
+
+
+async def await_with_progress(awaitable: Awaitable[T], emit: EventSink, message: str, interval: float = 4.0) -> T:
+    """Await slow work while emitting compact, non-reasoning progress heartbeats."""
+    task = asyncio.ensure_future(awaitable)
+    started = time.monotonic()
+    try:
+        while not task.done():
+            done, _ = await asyncio.wait({task}, timeout=interval)
+            if task in done:
+                break
+            elapsed = max(1, round(time.monotonic() - started))
+            await emit({"type": "progress", "message": message, "elapsed_seconds": elapsed})
+        return await task
+    except asyncio.CancelledError:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        raise
+
+
+def compact_tool_arguments(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    """Remove large source bodies from browser-visible audit events."""
+    if name == "write_file":
+        content = str(arguments.get("content", ""))
+        return {"path": arguments.get("path", ""), "content_bytes": len(content.encode("utf-8"))}
+    if name == "apply_patch":
+        patch = str(arguments.get("patch", ""))
+        files = [line.split(":", 1)[1].strip() for line in patch.splitlines() if line.startswith(("*** Add File:", "*** Update File:"))]
+        return {"files": files[:20], "patch_bytes": len(patch.encode("utf-8"))}
+    return {key: (value[:1000] + "…" if isinstance(value, str) and len(value) > 1000 else value) for key, value in arguments.items()}
+
+
+def compact_tool_result(name: str, result: dict[str, Any]) -> dict[str, Any]:
+    """Keep operational evidence without streaming complete files or logs to the UI."""
+    compact: dict[str, Any] = {"ok": bool(result.get("ok"))}
+    for key in ("path", "bytes", "returncode", "timeout", "cancelled", "truncated"):
+        if key in result:
+            compact[key] = result[key]
+    if result.get("error"):
+        compact["error"] = str(result["error"])[:1000]
+    if isinstance(result.get("files"), list):
+        compact["files"] = result["files"][:20]
+    if isinstance(result.get("entries"), list):
+        compact["entry_count"] = len(result["entries"])
+    if isinstance(result.get("hits"), list):
+        compact["hit_count"] = len(result["hits"])
+    if "content" in result:
+        compact["content_chars"] = len(str(result.get("content") or ""))
+    if name == "run_command":
+        stdout = str(result.get("stdout") or "")
+        stderr = str(result.get("stderr") or "")
+        if stdout:
+            compact["stdout_tail"] = stdout[-800:]
+        if stderr:
+            compact["stderr_tail"] = stderr[-800:]
+    return compact
 
 
 def trim_context(messages: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
@@ -66,7 +126,7 @@ class AgentService:
             await emit({"type": "step", "step": 1, "message": "正在整理需求" if mode == "plan" else "正在确认需求"})
             messages = trim_context(messages, self.settings.max_context_chars)
             try:
-                message = normalize_message(await self.model.complete(messages, []))
+                message = normalize_message(await await_with_progress(self.model.complete(messages, []), emit, "正在等待模型整理结果"))
             except ModelError as exc:
                 await emit({"type": "error", "message": str(exc)})
                 return str(exc), messages
@@ -84,7 +144,7 @@ class AgentService:
             if len(messages) < before_trim:
                 await emit({"type": "context_trimmed", "message": "历史消息较长，已保留最近上下文。"})
             try:
-                message = normalize_message(await self.model.complete(messages, registry.schemas()))
+                message = normalize_message(await await_with_progress(self.model.complete(messages, registry.schemas()), emit, "正在等待模型分析下一步"))
             except ModelError as exc:
                 await emit({"type": "error", "message": str(exc)})
                 return str(exc), messages
@@ -114,10 +174,14 @@ class AgentService:
                         raise ValueError("工具参数必须是 JSON 对象。")
                 except (json.JSONDecodeError, TypeError, ValueError):
                     result = {"ok": False, "error": "工具参数不是有效 JSON。"}
+                    await emit({"type": "tool_result", "tool": name, "result": result})
+                    messages.append({"role": "tool", "tool_call_id": call.get("id", name), "content": json.dumps(result, ensure_ascii=False)})
+                    tool_calls_used += 1
+                    continue
                 else:
-                    await emit({"type": "tool_start", "tool": name, "arguments": args})
-                result = await registry.call(name, args)
-                await emit({"type": "tool_result", "tool": name, "result": result})
+                    await emit({"type": "tool_start", "tool": name, "arguments": compact_tool_arguments(name, args)})
+                result = await await_with_progress(registry.call(name, args), emit, f"正在执行工具 · {name}")
+                await emit({"type": "tool_result", "tool": name, "result": compact_tool_result(name, result)})
                 messages.append({"role": "tool", "tool_call_id": call.get("id", name), "content": json.dumps(result, ensure_ascii=False)})
                 tool_calls_used += 1
                 if result.get("cancelled"):

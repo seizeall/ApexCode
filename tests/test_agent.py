@@ -1,9 +1,10 @@
+import asyncio
 import json
 from pathlib import Path
 
 import pytest
 
-from app.agent.service import AgentService, trim_context
+from app.agent.service import AgentService, await_with_progress, compact_tool_arguments, compact_tool_result, trim_context
 from app.config import Settings
 
 
@@ -34,7 +35,9 @@ async def test_agent_returns_final_message(tmp_path: Path) -> None:
     events = []
     result, history = await service.run("检查文件", lambda *_: _approved(), lambda event: _collect(events, event), mode="full")
     assert result == "已经读取并检查了文件。"
-    assert any(event["type"] == "tool_result" for event in events)
+    tool_result = next(event for event in events if event["type"] == "tool_result")
+    assert tool_result["result"]["content_chars"] == 6
+    assert "content" not in tool_result["result"]
     assert len(history) >= 4
 
 
@@ -59,6 +62,27 @@ def test_system_prompt_requests_auditable_summary_without_private_reasoning() ->
 
     assert "可审计的工作摘要" in SYSTEM_PROMPT
     assert "不输出逐字内部推理" in SYSTEM_PROMPT
+
+
+@pytest.mark.asyncio
+async def test_slow_work_emits_progress_heartbeats() -> None:
+    events = []
+    result = await await_with_progress(
+        asyncio.sleep(.035, result="done"),
+        lambda event: _collect(events, event),
+        "正在等待测试任务",
+        interval=.005,
+    )
+    assert result == "done"
+    assert any(event["type"] == "progress" and event["elapsed_seconds"] >= 1 for event in events)
+
+
+def test_tool_audit_events_are_compact() -> None:
+    arguments = compact_tool_arguments("write_file", {"path": "site/index.html", "content": "x" * 2000})
+    result = compact_tool_result("run_command", {"ok": True, "returncode": 0, "stdout": "x" * 2000, "stderr": ""})
+    assert arguments == {"path": "site/index.html", "content_bytes": 2000}
+    assert len(result["stdout_tail"]) == 800
+    assert "stdout" not in result
 
 
 @pytest.mark.asyncio

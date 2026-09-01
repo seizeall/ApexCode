@@ -21,6 +21,9 @@ def test_web_serves_workbench_without_workspace_sidebar(tmp_path: Path) -> None:
     assert 'id="upload-file-button"' in page.text
     assert 'id="upload-project-button"' in page.text
     assert 'id="api-settings"' in page.text
+    assert 'id="preview-launch"' in page.text
+    assert 'id="preview-frame"' in page.text
+    assert 'id="live-progress"' in page.text
     assert 'id="api-base-url"' in page.text
     composer_start = page.text.index('id="composer"')
     assert page.text.index('id="upload-file-button"') > composer_start
@@ -33,6 +36,30 @@ def test_web_serves_workbench_without_workspace_sidebar(tmp_path: Path) -> None:
     tree = client.get("/api/workspace/tree")
     assert tree.status_code == 200
     assert tree.json()["entries"][0]["name"] == "demo.py"
+
+
+def test_preview_finds_build_output_and_serves_assets_safely(tmp_path: Path) -> None:
+    (tmp_path / "index.html").write_text("<h1>root</h1>", encoding="utf-8")
+    site = tmp_path / "website"
+    (site / "dist").mkdir(parents=True)
+    (site / "index.html").write_text("<h1>source</h1>", encoding="utf-8")
+    (site / "dist" / "index.html").write_text('<link rel="stylesheet" href="app.css"><h1>built</h1>', encoding="utf-8")
+    (site / "dist" / "app.css").write_text("body { color: green; }", encoding="utf-8")
+    (tmp_path / ".env").write_text("SECRET=not-for-preview", encoding="utf-8")
+    client = TestClient(create_app(Settings(workspace=tmp_path)))
+
+    candidates = client.get("/api/preview/candidates").json()["candidates"]
+    assert candidates[0]["path"] == "website/dist/index.html"
+    assert client.get(candidates[0]["url"]).text.endswith("<h1>built</h1>")
+    assert client.get("/preview/website/dist/app.css").text == "body { color: green; }"
+    assert client.get("/preview/.env").status_code == 404
+
+
+def test_preview_origin_cannot_access_agent_api(tmp_path: Path) -> None:
+    (tmp_path / "index.html").write_text("<h1>preview</h1>", encoding="utf-8")
+    client = TestClient(create_app(Settings(workspace=tmp_path)))
+    assert client.get("/preview/index.html", headers={"host": "localhost:8000"}).status_code == 200
+    assert client.get("/api/config", headers={"host": "localhost:8000"}).status_code == 403
 
 
 def test_web_rejects_unknown_mode(tmp_path: Path) -> None:

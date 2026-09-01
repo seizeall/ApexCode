@@ -10,6 +10,8 @@ ApexCode 使用 OpenAI Chat Completions 兼容接口，也支持 Anthropic Messa
 
 也可以在网页右上角点击“API 配置”，填写 API Base URL、API Key、Model Name 和本地工作区绝对路径。保存后立即对后续任务生效；接口不会把密钥返回给浏览器，密钥只保存在本机未入库的 `.env`。Agent 的列目录、读取、搜索、写入、补丁和命令工具只能操作该工作区，不能越界访问其他路径。
 
+任务执行时，页面会持续显示当前阶段和已用时间；执行详情只展示精简后的工具摘要，不传输完整文件正文或大段命令日志。工作区包含 `index.html` 后，顶部“预览网站”按钮会自动启用并在应用内渲染。对于 Vite、React 等工程，先让 Agent 执行构建，预览器会优先选择 `dist/index.html` 或 `build/index.html`。
+
 界面字段映射：`API_BASE_URL` 对应 `CODING_AGENT_BASE_URL`，`API_KEY` 对应 `CODING_AGENT_API_KEY`，`MODEL_NAME` 对应 `CODING_AGENT_MODEL`。
 
 ### OpenAI / OpenAI 兼容网关
@@ -40,4 +42,4 @@ CODING_AGENT_MODEL=claude-3-5-sonnet-latest
 
 ## HTTP 接口
 
-服务启动后可访问 `/api/docs` 查看 Swagger。主要接口：`GET /api/config` 配置状态；`POST /api/sessions` 新建会话；`GET /api/sessions` 会话列表；`POST /api/sessions/{id}/messages` 提交任务（`mode` 为 `ask`、`plan` 或 `full`）；`GET /api/runs/{id}/events` SSE 执行事件；`POST /api/runs/{id}/cancel` 停止任务；`POST /api/workspace/upload` 上传文件；`GET /api/workspace/tree` 查看工作区目录。
+服务启动后可访问 `/api/docs` 查看 Swagger。主要接口：`GET /api/config` 配置状态；`POST /api/sessions` 新建会话；`GET /api/sessions` 会话列表；`POST /api/sessions/{id}/messages` 提交任务（`mode` 为 `ask`、`plan` 或 `full`）；`GET /api/runs/{id}/events` SSE 执行事件和进度心跳；`POST /api/runs/{id}/cancel` 停止任务；`POST /api/workspace/upload` 上传文件；`GET /api/workspace/tree` 查看工作区目录；`GET /api/preview/candidates` 获取网站预览入口。
