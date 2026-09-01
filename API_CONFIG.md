@@ -8,7 +8,7 @@ ApexCode 使用 OpenAI Chat Completions 兼容接口，也支持 Anthropic Messa
 
 便携版：解压 `ApexCode-Windows.zip`，将 `.env.example` 复制为 `.env`，用记事本打开并至少填写 `CODING_AGENT_API_KEY`，然后双击 `ApexCode.exe`。程序会自动打开 `http://127.0.0.1:8000`，工作区是同目录的 `workspace` 文件夹。
 
-也可以在网页右上角点击“API 配置”，填写 API Base URL、API Key 和 Model Name。保存后立即对后续任务生效；接口不会把密钥返回给浏览器，密钥只保存在本机未入库的 `.env`。
+也可以在网页右上角点击“API 配置”，填写 API Base URL、API Key、Model Name 和本地工作区绝对路径。保存后立即对后续任务生效；接口不会把密钥返回给浏览器，密钥只保存在本机未入库的 `.env`。Agent 的列目录、读取、搜索、写入、补丁和命令工具只能操作该工作区，不能越界访问其他路径。
 
 界面字段映射：`API_BASE_URL` 对应 `CODING_AGENT_BASE_URL`，`API_KEY` 对应 `CODING_AGENT_API_KEY`，`MODEL_NAME` 对应 `CODING_AGENT_MODEL`。
 

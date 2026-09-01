@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ApexCode</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260901-api-config">
+  <link rel="stylesheet" href="/static/styles.css?v=20260902-workspace">
 </head>
 <body>
   <div class="app-shell">
@@ -29,12 +29,12 @@
   <div id="details-backdrop" class="details-backdrop hidden"></div>
   <aside id="details-drawer" class="details-drawer" aria-hidden="true">
     <div class="drawer-head"><div><span class="eyebrow">ACTIVITY</span><h2>执行详情</h2></div><button id="details-close" class="icon-button" type="button" title="关闭执行详情">×</button></div>
-    <p class="drawer-note">这里展示可审计的工具活动，不展示模型内部思考。</p>
+    <p class="drawer-note">这里展示模型工作摘要、工具活动和结果，不展示逐字内部思维链。</p>
     <div id="details-list" class="details-list"><div class="muted">完成一次任务后，这里会保留执行记录。</div></div>
   </aside>
   <div id="approval-modal" class="modal-backdrop hidden"><div class="modal"><div class="modal-kicker">需要你的确认</div><h2 id="approval-title">即将执行操作</h2><pre id="approval-detail"></pre><div class="modal-actions"><button id="approval-deny" class="button ghost">拒绝</button><button id="approval-allow" class="button primary">允许一次</button></div></div></div>
   <div id="session-modal" class="modal-backdrop hidden"><div class="modal session-modal"><div class="modal-kicker">会话设置</div><h2 id="session-modal-title">新建会话</h2><label class="session-name-label" for="session-name">会话名称</label><input id="session-name" class="session-name-input" maxlength="80" placeholder="例如：修复登录接口" autocomplete="off"><p id="session-name-error" class="session-name-error"></p><div class="modal-actions"><button id="session-modal-cancel" class="button ghost" type="button">取消</button><button id="session-modal-submit" class="button primary" type="button">创建会话</button></div></div></div>
-  <div id="api-modal" class="modal-backdrop hidden"><form id="api-form" class="modal api-modal"><div class="modal-kicker">模型连接</div><h2>配置 API</h2><label class="config-label" for="api-base-url">API_BASE_URL</label><input id="api-base-url" class="config-input" type="url" required autocomplete="url" placeholder="https://api.openai.com/v1"><label class="config-label" for="api-key">API_KEY</label><div class="secret-field"><input id="api-key" class="config-input" type="password" autocomplete="off" placeholder="已配置时留空可保留原密钥"><button id="toggle-api-key" class="secret-toggle" type="button" title="显示或隐藏 API Key" aria-label="显示或隐藏 API Key">◉</button></div><label class="config-label" for="api-model">MODEL_NAME</label><input id="api-model" class="config-input" required autocomplete="off" placeholder="gpt-4o-mini"><p id="api-config-state" class="config-state"></p><div class="modal-actions"><button id="api-modal-cancel" class="button ghost" type="button">取消</button><button id="api-modal-submit" class="button primary" type="submit">保存配置</button></div></form></div>
-  <script src="/static/app.js?v=20260901-api-config"></script>
+  <div id="api-modal" class="modal-backdrop hidden"><form id="api-form" class="modal api-modal"><div class="modal-kicker">模型与工作区</div><h2>运行配置</h2><label class="config-label" for="api-base-url">API_BASE_URL</label><input id="api-base-url" class="config-input" type="url" required autocomplete="url" placeholder="https://api.openai.com/v1"><label class="config-label" for="api-key">API_KEY</label><div class="secret-field"><input id="api-key" class="config-input" type="password" autocomplete="off" placeholder="已配置时留空可保留原密钥"><button id="toggle-api-key" class="secret-toggle" type="button" title="显示或隐藏 API Key" aria-label="显示或隐藏 API Key">◉</button></div><label class="config-label" for="api-model">MODEL_NAME</label><input id="api-model" class="config-input" required autocomplete="off" placeholder="gpt-4o-mini"><label class="config-label" for="agent-workspace">本地工作区绝对路径</label><input id="agent-workspace" class="config-input" required autocomplete="off" placeholder="E:\projects\my-site"><p id="api-config-state" class="config-state"></p><div class="modal-actions"><button id="api-modal-cancel" class="button ghost" type="button">取消</button><button id="api-modal-submit" class="button primary" type="submit">保存配置</button></div></form></div>
+  <script src="/static/app.js?v=20260902-workspace"></script>
 </body>
 </html>

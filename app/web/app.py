@@ -42,8 +42,9 @@ class ConfigUpdateBody(BaseModel):
     base_url: str = Field(min_length=1, max_length=500)
     api_key: str = Field(default="", max_length=1000)
     model: str = Field(min_length=1, max_length=200)
+    workspace: str = Field(min_length=1, max_length=1000)
 
-    @field_validator("base_url", "api_key", "model", mode="before")
+    @field_validator("base_url", "api_key", "model", "workspace", mode="before")
     @classmethod
     def strip_values(cls, value: Any) -> Any:
         return value.strip() if isinstance(value, str) else value
@@ -61,6 +62,13 @@ class ConfigUpdateBody(BaseModel):
     def validate_model(cls, value: str) -> str:
         if not value or any(char in value for char in "\r\n"):
             raise ValueError("模型名称不能为空或包含换行。")
+        return value
+
+    @field_validator("workspace")
+    @classmethod
+    def validate_workspace(cls, value: str) -> str:
+        if any(char in value for char in "\r\n\x00"):
+            raise ValueError("工作区路径包含无效字符。")
         return value
 
 
@@ -185,9 +193,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/api/config")
     async def update_config(body: ConfigUpdateBody) -> dict[str, Any]:
         nonlocal cfg
+        if any(item.status in {"queued", "running", "waiting"} for item in runs.values()):
+            raise HTTPException(409, "任务执行中，停止或完成任务后再切换工作区。")
         api_key = body.api_key or cfg.api_key
         if not api_key:
             raise HTTPException(400, "首次配置必须填写 API Key。")
+        workspace = Path(body.workspace).expanduser()
+        if not workspace.is_absolute():
+            raise HTTPException(400, "工作区必须填写绝对路径。")
+        workspace = workspace.resolve()
+        try:
+            workspace.mkdir(parents=True, exist_ok=True)
+            probe = workspace / ".apexcode-write-test"
+            probe.touch(exist_ok=False)
+            probe.unlink()
+        except OSError as exc:
+            raise HTTPException(400, f"工作区不可写：{exc}") from exc
         config_file = Path(cfg.config_file or (cfg.workspace / ".env"))
         try:
             config_file.parent.mkdir(parents=True, exist_ok=True)
@@ -195,11 +216,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             set_key(str(config_file), "CODING_AGENT_API_KEY", api_key, quote_mode="always")
             set_key(str(config_file), "CODING_AGENT_BASE_URL", body.base_url, quote_mode="always")
             set_key(str(config_file), "CODING_AGENT_MODEL", body.model, quote_mode="always")
+            set_key(str(config_file), "CODING_AGENT_WORKSPACE", str(workspace), quote_mode="always")
         except OSError as exc:
             raise HTTPException(500, f"无法保存 API 配置：{exc}") from exc
         from dataclasses import replace
-        cfg = replace(cfg, api_key=api_key, base_url=body.base_url, model=body.model, config_file=config_file)
-        return {"configured": True, "base_url": cfg.base_url, "model": cfg.model}
+        cfg = replace(cfg, api_key=api_key, base_url=body.base_url, model=body.model, workspace=workspace, config_file=config_file)
+        return {"configured": True, "base_url": cfg.base_url, "model": cfg.model, "workspace": str(cfg.workspace)}
 
     @app.get("/api/sessions")
     async def list_sessions() -> dict[str, Any]:

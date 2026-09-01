@@ -139,6 +139,7 @@ function renderSessions(items) {
 
 function detailLabel(event) {
   if (event.type === 'step') return {label: '工作阶段', text: event.message, tone: 'step'};
+  if (event.type === 'assistant') return {label: '模型工作摘要', text: event.message || '模型正在继续处理任务。', tone: 'step'};
   if (event.type === 'tool_start') return {label: `调用工具 · ${event.tool}`, text: JSON.stringify(event.arguments, null, 2), tone: 'tool'};
   if (event.type === 'tool_result') return {label: `工具返回 · ${event.tool}`, text: JSON.stringify(event.result, null, 2), tone: event.result?.ok === false ? 'error' : 'result'};
   if (event.type === 'approval_required') return {label: '等待确认', text: event.action === 'write_file' ? '等待允许修改文件' : (event.action === 'apply_patch' ? '等待允许应用文件补丁' : '等待允许执行命令'), tone: 'approval'};
@@ -206,6 +207,7 @@ async function openApiDialog() {
     const config = apiConfig || await refreshConfig();
     $('api-base-url').value = config.base_url || '';
     $('api-model').value = config.model || '';
+    $('agent-workspace').value = config.workspace || '';
     $('api-key').value = '';
     $('api-key').type = 'password';
     $('api-config-state').textContent = config.configured ? 'API Key 已配置，留空将保留原密钥。' : '';
@@ -233,7 +235,7 @@ async function saveApiConfig() {
     await request('/api/config', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({base_url: $('api-base-url').value, api_key: $('api-key').value, model: $('api-model').value}),
+      body: JSON.stringify({base_url: $('api-base-url').value, api_key: $('api-key').value, model: $('api-model').value, workspace: $('agent-workspace').value}),
     });
     await refreshConfig();
     closeApiDialog();
@@ -300,7 +302,7 @@ async function sendPrompt(prompt) {
   stream.onmessage = (message) => {
     const event = JSON.parse(message.data);
     if (event.type === 'status') return;
-    if (['step', 'tool_start', 'tool_result', 'approval_required', 'approval_auto', 'error'].includes(event.type)) { detailEvents.push(event); renderDetails(); renderInlineProcess(); }
+    if (['step', 'assistant', 'tool_start', 'tool_result', 'approval_required', 'approval_auto', 'error'].includes(event.type)) { detailEvents.push(event); renderDetails(); renderInlineProcess(); }
     if (event.type === 'error') setStatus('执行失败', 'failed');
     if (event.type === 'approval_required') { setStatus('等待确认', 'waiting'); showApproval(event); }
     if (event.type === 'done') { addEvent('最终结果', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : (event.status === 'cancelled' ? '已取消' : '执行失败'), event.status === 'completed' ? 'done' : 'failed'); setRunning(false); setComposerBusy(false); currentRun = null; stream.close(); refreshSessions(); }

@@ -26,7 +26,7 @@ def test_web_serves_workbench_without_workspace_sidebar(tmp_path: Path) -> None:
     assert page.text.index('id="upload-file-button"') > composer_start
     assert page.text.index('id="upload-project-button"') > composer_start
     assert page.text.index('id="new-session"') < composer_start
-    assert "不展示模型内部思考" in page.text
+    assert "不展示逐字内部思维链" in page.text
     assert "message-meta" in (Path("app/web/static/app.js").read_text(encoding="utf-8"))
     assert "markdownToHtml" in Path("app/web/static/app.js").read_text(encoding="utf-8")
     assert "markdown-table" in Path("app/web/static/styles.css").read_text(encoding="utf-8")
@@ -124,20 +124,34 @@ def test_workspace_upload_uses_dedicated_upload_limits(tmp_path: Path) -> None:
 def test_api_config_can_be_saved_without_exposing_key(tmp_path: Path) -> None:
     config_file = tmp_path / ".env"
     client = TestClient(create_app(Settings(workspace=tmp_path, config_file=config_file)))
-    response = client.post("/api/config", json={"base_url": "https://gateway.example/v1/", "api_key": "secret-test-key", "model": "tool-model"})
+    target_workspace = tmp_path / "site-project"
+    response = client.post("/api/config", json={"base_url": "https://gateway.example/v1/", "api_key": "secret-test-key", "model": "tool-model", "workspace": str(target_workspace)})
     assert response.status_code == 200
-    assert response.json() == {"configured": True, "base_url": "https://gateway.example/v1", "model": "tool-model"}
+    assert response.json() == {"configured": True, "base_url": "https://gateway.example/v1", "model": "tool-model", "workspace": str(target_workspace)}
     public_config = client.get("/api/config").json()
     assert public_config["configured"] is True
     assert "api_key" not in public_config and "secret-test-key" not in str(public_config)
     saved = config_file.read_text(encoding="utf-8")
     assert "CODING_AGENT_API_KEY='secret-test-key'" in saved
+    from dotenv import dotenv_values
+    assert dotenv_values(config_file)["CODING_AGENT_WORKSPACE"] == str(target_workspace)
+    assert target_workspace.is_dir()
+    uploaded = client.post(
+        "/api/workspace/upload",
+        files=[("files", ("index.html", b"<h1>site</h1>", "text/html"))],
+        data={"paths": "website/index.html"},
+    )
+    assert uploaded.status_code == 200
+    assert (target_workspace / "website" / "index.html").read_text(encoding="utf-8") == "<h1>site</h1>"
+    assert not (tmp_path / "website" / "index.html").exists()
 
 
 def test_api_config_requires_valid_url_and_initial_key(tmp_path: Path) -> None:
     client = TestClient(create_app(Settings(workspace=tmp_path, config_file=tmp_path / ".env")))
-    assert client.post("/api/config", json={"base_url": "not-a-url", "api_key": "key", "model": "model"}).status_code == 422
-    assert client.post("/api/config", json={"base_url": "https://example.test/v1", "api_key": "", "model": "model"}).status_code == 400
+    valid_workspace = str(tmp_path / "workspace")
+    assert client.post("/api/config", json={"base_url": "not-a-url", "api_key": "key", "model": "model", "workspace": valid_workspace}).status_code == 422
+    assert client.post("/api/config", json={"base_url": "https://example.test/v1", "api_key": "", "model": "model", "workspace": valid_workspace}).status_code == 400
+    assert client.post("/api/config", json={"base_url": "https://example.test/v1", "api_key": "key", "model": "model", "workspace": "relative/path"}).status_code == 400
 
 
 def test_session_name_is_persisted_in_metadata(tmp_path: Path) -> None:

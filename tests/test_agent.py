@@ -54,6 +54,13 @@ def test_trim_context_keeps_system_and_newest_messages() -> None:
     assert len(trimmed) < len(messages)
 
 
+def test_system_prompt_requests_auditable_summary_without_private_reasoning() -> None:
+    from app.agent.service import SYSTEM_PROMPT
+
+    assert "可审计的工作摘要" in SYSTEM_PROMPT
+    assert "不输出逐字内部推理" in SYSTEM_PROMPT
+
+
 @pytest.mark.asyncio
 async def test_plan_mode_never_exposes_or_calls_tools(tmp_path: Path) -> None:
     model = ModeModel()
