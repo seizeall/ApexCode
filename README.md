@@ -1,4 +1,4 @@
-# ApexCode
+<img width="1672" height="941" alt="apexcode-overview" src="https://github.com/user-attachments/assets/5d11360f-5afd-4f4d-9a82-cbdf6ca95737" /># ApexCode
 
 <p align="center">
   <b>一个轻量级Coding Agent工作台</b>
@@ -26,9 +26,8 @@ ApexCode是一个**简单的的Coding Agent**。它不依赖第三方Agent框架
 
 ## 1. 项目描述
 
-<p align="center">
-  <img src="docs/assets/apexcode-overview.png" alt="ApexCode Overview" width="100%">
-</p>
+![Uploading apexcode-overview.png…]()
+
 
 
 <p align="center">
