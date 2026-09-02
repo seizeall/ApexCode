@@ -1,4 +1,4 @@
-# ApexCode
+
 
 <p align="center">
   <b>一个轻量级Coding Agent工作台</b>
@@ -15,19 +15,18 @@ ApexCode是一个**简单的的Coding Agent**。它不依赖第三方Agent框架
 
 项目同时提供**Web UI、CLI和Windows一键运行版本**，兼容OpenAI Chat Completions风格接口与Anthropic Messages风格接口，并通过工作区路径限制、危险命令拦截、参数校验、执行超时和上下文裁剪等机制提高本地Agent执行的安全性与稳定性。
 
-- **项目名称：**ApexCode
-- **核心语言：**Python 3.10+
-- **参数与Schema校验：**Pydantic
-- **支持接口：**OpenAI-compatible API、Anthropic-compatible API
-- **项目仓库：**https://github.com/seizeall/ApexCode
+- **项目名称**：ApexCode
+- **核心语言**：Python 3.10+
+- **参数与Schema校验**：Pydantic
+- **支持接口**：OpenAI-compatible API、Anthropic-compatible API
+- **项目仓库**：https://github.com/seizeall/ApexCode
 - **EXE安装包**：
 
 ---
 
 ## 1. 项目描述
 
-![Uploading apexcode-overview.png…]()
-
+<img width="1672" height="855" alt="apexcode-overview" src="https://github.com/user-attachments/assets/a77ca9c6-9c2b-4546-b52a-5d994f3f7414" />
 
 
 <p align="center">
