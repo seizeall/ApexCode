@@ -19,6 +19,7 @@ class Settings:
     max_steps: int = 12
     command_timeout: float = 30.0
     model_timeout: float = 60.0
+    model_max_tokens: int = 2048
     max_file_bytes: int = 512_000
     max_upload_file_bytes: int = 10 * 1024 * 1024
     max_upload_total_bytes: int = 100 * 1024 * 1024
@@ -49,6 +50,7 @@ class Settings:
             max_steps=int(os.getenv("CODING_AGENT_MAX_STEPS", cls.max_steps)),
             command_timeout=float(os.getenv("CODING_AGENT_COMMAND_TIMEOUT", cls.command_timeout)),
             model_timeout=float(os.getenv("CODING_AGENT_MODEL_TIMEOUT", cls.model_timeout)),
+            model_max_tokens=int(os.getenv("CODING_AGENT_MODEL_MAX_TOKENS", cls.model_max_tokens)),
             max_file_bytes=int(os.getenv("CODING_AGENT_MAX_FILE_BYTES", cls.max_file_bytes)),
             max_upload_file_bytes=int(os.getenv("CODING_AGENT_MAX_UPLOAD_FILE_BYTES", cls.max_upload_file_bytes)),
             max_upload_total_bytes=int(os.getenv("CODING_AGENT_MAX_UPLOAD_TOTAL_BYTES", cls.max_upload_total_bytes)),

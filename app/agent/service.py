@@ -24,7 +24,7 @@ SYSTEM_PROMPT = """你是一个运行在本机工作区内的编程助手。先�
 T = TypeVar("T")
 
 
-async def await_with_progress(awaitable: Awaitable[T], emit: EventSink, message: str, interval: float = 4.0) -> T:
+async def await_with_progress(awaitable: Awaitable[T], emit: EventSink, message: str, interval: float = 1.0) -> T:
     """Await slow work while emitting compact, non-reasoning progress heartbeats."""
     task = asyncio.ensure_future(awaitable)
     started = time.monotonic()

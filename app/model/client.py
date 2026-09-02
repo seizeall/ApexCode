@@ -82,7 +82,7 @@ class OpenAICompatibleClient:
         if "anthropic" in self.settings.base_url.lower():
             payload, headers, endpoint = self._anthropic_request(messages, tools)
         else:
-            payload = {"model": self.settings.model, "messages": messages, "temperature": 0.15, "tools": tools, "tool_choice": "auto"}
+            payload = {"model": self.settings.model, "messages": messages, "temperature": 0.15, "max_tokens": self.settings.model_max_tokens, "tools": tools, "tool_choice": "auto"}
             headers = {"Authorization": f"Bearer {self.settings.api_key}"}
             endpoint = self.settings.base_url if self.settings.base_url.endswith("/chat/completions") else f"{self.settings.base_url}/chat/completions"
         own_client = self._client is None
@@ -143,7 +143,7 @@ class OpenAICompatibleClient:
             else:
                 converted.append({"role": role, "content": message.get("content") or ""})
         anthropic_tools = [{"name": t["function"]["name"], "description": t["function"].get("description", ""), "input_schema": t["function"].get("parameters", {"type": "object"})} for t in tools]
-        payload: dict[str, Any] = {"model": self.settings.model, "max_tokens": 4096, "messages": converted, "tools": anthropic_tools}
+        payload: dict[str, Any] = {"model": self.settings.model, "max_tokens": self.settings.model_max_tokens, "messages": converted, "tools": anthropic_tools}
         if system:
             payload["system"] = system
         headers = {"x-api-key": self.settings.api_key, "anthropic-version": "2023-06-01"}

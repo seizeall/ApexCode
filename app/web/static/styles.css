@@ -98,7 +98,7 @@ h1 { font-size: 25px; line-height: 1.2; margin: 9px 0 0; color: #1b2c3a; letter-
 .event.user-question .message-meta { justify-content: flex-end; }
 .event.user-question .message-avatar { order: 2; background: #dceaff; color: #3979d5; }
 .composer { margin: 0 42px 32px; border: 0; border-radius: 8px; background: rgba(255, 255, 255, .95); box-shadow: 0 7px 20px #263d490e; }
-textarea, textarea:focus, textarea:focus-visible { width: 100%; resize: none; border: 0; outline: 0 !important; box-shadow: none !important; background: transparent; color: #1f2d3d; padding: 15px 16px; font: inherit; font-size: 13px; line-height: 1.5; }
+textarea, textarea:focus, textarea:focus-visible { width: 100%; min-height: 74px; max-height: 360px; resize: vertical; overflow-y: auto; border: 0; outline: 0 !important; box-shadow: none !important; background: transparent; color: #1f2d3d; padding: 15px 16px; font: inherit; font-size: 13px; line-height: 1.5; }
 textarea::placeholder { color: #91a0ac; }
 .composer-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 14px; padding: 8px 11px 10px 16px; color: #8a98a4; font-size: 10px; }
 .composer-left { display: flex; align-items: flex-end; gap: 14px; min-width: 0; }

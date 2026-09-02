@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import json
 from pathlib import Path
 
@@ -62,6 +63,10 @@ def test_system_prompt_requests_auditable_summary_without_private_reasoning() ->
 
     assert "可审计的工作摘要" in SYSTEM_PROMPT
     assert "不输出逐字内部推理" in SYSTEM_PROMPT
+
+
+def test_progress_heartbeat_defaults_to_one_second() -> None:
+    assert inspect.signature(await_with_progress).parameters["interval"].default == 1.0
 
 
 @pytest.mark.asyncio

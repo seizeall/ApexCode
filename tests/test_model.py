@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -7,11 +9,14 @@ from app.model.client import ModelError, OpenAICompatibleClient, normalize_messa
 
 @pytest.mark.asyncio
 async def test_openai_response_is_normalized() -> None:
+    seen = {}
     async def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(json.loads(request.content))
         return httpx.Response(200, json={"choices": [{"message": {"role": "assistant", "content": "完成"}}]})
 
     client = OpenAICompatibleClient(Settings(api_key="test", base_url="https://example.test/v1"), httpx.AsyncClient(transport=httpx.MockTransport(handler)))
     assert (await client.complete([], []))["content"] == "完成"
+    assert seen["max_tokens"] == 2048
 
 
 @pytest.mark.asyncio

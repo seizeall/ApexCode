@@ -111,6 +111,16 @@ function setComposerBusy(busy) {
   textarea.disabled = busy;
 }
 
+function resizePrompt() {
+  const textarea = $('prompt');
+  if (!textarea) return;
+  textarea.style.height = 'auto';
+  const maxHeight = 360;
+  const nextHeight = Math.min(Math.max(textarea.scrollHeight, 74), maxHeight);
+  textarea.style.height = `${nextHeight}px`;
+  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+}
+
 function renderInlineProcess() {
   const panel = $('process-panel');
   const list = $('process-list');
@@ -373,6 +383,7 @@ async function sendPrompt(prompt) {
     currentRun = null;
   }
   $('prompt').value = '';
+  resizePrompt();
   addEvent('你的提问', prompt, 'user-question');
   setStatus('处理中', 'running');
   setLiveProgress('正在创建任务');
@@ -487,6 +498,7 @@ async function init() {
   $('session-modal').onclick = (event) => { if (event.target === $('session-modal')) closeNameDialog(); };
   $('composer').onsubmit = (e) => { e.preventDefault(); sendPrompt($('prompt').value); };
   $('prompt').onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPrompt(e.target.value); } };
+  $('prompt').oninput = resizePrompt;
   document.querySelectorAll('[data-prompt]').forEach(button => button.onclick = () => sendPrompt(button.dataset.prompt));
   document.querySelectorAll('[data-mode]').forEach(button => button.onclick = () => {
     selectedMode = button.dataset.mode;
@@ -503,5 +515,6 @@ async function init() {
     if (latest) await restoreSession(latest.session_id); else await newSession(false);
     renderSessions(saved.sessions);
   } catch (error) { await newSession(); }
+  resizePrompt();
 }
 init();
