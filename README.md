@@ -1,6 +1,5 @@
 # ApexCode
 
-> 本地优先、过程可见、成果可预览的轻量编程 Agent。
 
 **Git 仓库：** https://github.com/seizeall/ApexCode
 
