@@ -109,17 +109,6 @@ async def test_plan_mode_never_exposes_or_calls_tools(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_ask_mode_does_not_execute_tools(tmp_path: Path) -> None:
-    model = ModeModel()
-    events = []
-    result, _ = await AgentService(Settings(workspace=tmp_path), model=model).run(
-        "需求不清楚", _approved, lambda event: _collect(events, event), mode="ask"
-    )
-    assert result == "这是模式结果。"
-    assert model.calls and model.calls[0][1] == []
-
-
-@pytest.mark.asyncio
 async def test_full_mode_uses_tools_without_approval_callback(tmp_path: Path) -> None:
     (tmp_path / "sample.txt").write_text("sample", encoding="utf-8")
     model = FakeModel()

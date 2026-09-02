@@ -42,4 +42,4 @@ CODING_AGENT_MODEL=claude-3-5-sonnet-latest
 
 ## HTTP 接口
 
-服务启动后可访问 `/api/docs` 查看 Swagger。主要接口：`GET /api/config` 配置状态；`POST /api/sessions` 新建会话；`GET /api/sessions` 会话列表；`POST /api/sessions/{id}/messages` 提交任务（`mode` 为 `ask`、`plan` 或 `full`）；`GET /api/runs/{id}/events` SSE 执行事件和进度心跳；`POST /api/runs/{id}/cancel` 停止任务；`POST /api/workspace/upload` 上传文件；`GET /api/workspace/tree` 查看工作区目录；`GET /api/preview/candidates` 获取网站预览入口。
+服务启动后可访问 `/api/docs` 查看 Swagger。主要接口：`GET /api/config` 配置状态；`POST /api/sessions` 新建会话；`GET /api/sessions` 会话列表；`POST /api/sessions/{id}/messages` 提交任务（`mode` 为 `full` 或 `plan`）；`GET /api/runs/{id}/events` SSE 执行事件和进度心跳；`POST /api/runs/{id}/cancel` 停止任务；`GET /api/workspace/tree` 查看工作区目录；`GET /api/preview/candidates` 获取网站预览入口。

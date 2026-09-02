@@ -114,16 +114,14 @@ class AgentService:
         self.settings = settings
         self.model = model or OpenAICompatibleClient(settings)
 
-    async def run(self, prompt: str, approve: Callable[[str, dict[str, Any]], Awaitable[bool]], emit: EventSink, history: list[dict[str, Any]] | None = None, mode: str = "ask", cancel_event: asyncio.Event | None = None) -> tuple[str, list[dict[str, Any]]]:
+    async def run(self, prompt: str, approve: Callable[[str, dict[str, Any]], Awaitable[bool]], emit: EventSink, history: list[dict[str, Any]] | None = None, mode: str = "full", cancel_event: asyncio.Event | None = None) -> tuple[str, list[dict[str, Any]]]:
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("任务不能为空。")
         messages = list(history or [])
-        mode = mode if mode in {"full", "plan", "ask"} else "ask"
+        mode = mode if mode in {"full", "plan"} else "full"
         mode_prompt = SYSTEM_PROMPT
         if mode == "plan":
             mode_prompt += "\n当前是计划模式：只输出分阶段执行计划、涉及文件和验证方式，不调用工具，不修改任何内容。"
-        elif mode == "ask":
-            mode_prompt += "\n当前是询问模式：先检查用户需求是否明确，只提出完成任务所必需的澄清问题，不调用工具，不修改任何内容。"
         else:
             mode_prompt += "\n当前是完全模式：在安全规则允许的前提下直接完成任务，不为普通文件写入和命令执行请求用户确认。"
         if messages and messages[0].get("role") == "system":
@@ -134,8 +132,8 @@ class AgentService:
         registry = ToolRegistry(self.settings, approve, cancel_event)
         tool_calls_used = sum(1 for item in messages if item.get("role") == "tool")
         source_correction_attempts = 0
-        if mode in {"plan", "ask"}:
-            await emit({"type": "step", "step": 1, "message": "正在整理需求" if mode == "plan" else "正在确认需求"})
+        if mode == "plan":
+            await emit({"type": "step", "step": 1, "message": "正在整理需求"})
             messages = trim_context(messages, self.settings.max_context_chars)
             try:
                 message = normalize_message(await await_with_progress(self.model.complete(messages, []), emit, "正在等待模型整理结果"))

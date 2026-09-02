@@ -25,8 +25,12 @@ Copy-Item "examples\demo_project\apex_flowboard\*" $demoTarget -Recurse -Force
 
 Write-Host "[4/6] Building the click-to-install package..."
 $root = (Get-Location).Path
+$setupTarget = Join-Path $root "release\ApexCode-Setup.exe"
+if (Test-Path -LiteralPath $setupTarget) {
+  Remove-Item -LiteralPath $setupTarget -Force
+}
 $template = Get-Content "installer\ApexCode-Setup.sed.template" -Raw
-$sed = $template.Replace("{{TARGET}}", (Join-Path $root "release\ApexCode-Setup.exe"))
+$sed = $template.Replace("{{TARGET}}", $setupTarget)
 $sed = $sed.Replace("{{RELEASE}}", $release)
 $sed = $sed.Replace("{{INSTALLER}}", (Join-Path $root "installer"))
 $sedPath = Join-Path $root "build\ApexCode-Setup.sed"

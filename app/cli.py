@@ -35,7 +35,7 @@ async def _run(prompt: str, mode: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="本地 coding agent")
     parser.add_argument("prompt", nargs="?", help="要交给 Agent 的编程任务")
-    parser.add_argument("--mode", choices=("full", "plan", "ask"), default="ask", help="运行模式：full 完全、plan 计划、ask 询问")
+    parser.add_argument("--mode", choices=("full", "plan"), default="full", help="运行模式：full 完全、plan 计划")
     args = parser.parse_args()
     prompt = args.prompt or input("任务：")
     asyncio.run(_run(prompt, args.mode))

@@ -18,8 +18,8 @@ def test_web_serves_workbench_without_workspace_sidebar(tmp_path: Path) -> None:
     assert "运行记录" not in page.text
     assert 'id="details-drawer"' in page.text
     assert 'id="process-panel"' not in page.text
-    assert 'id="upload-file-button"' in page.text
-    assert 'id="upload-project-button"' in page.text
+    assert 'id="upload-file-button"' not in page.text
+    assert 'id="upload-project-button"' not in page.text
     assert 'id="api-settings"' in page.text
     assert 'id="preview-launch"' in page.text
     assert 'id="preview-frame"' in page.text
@@ -27,11 +27,10 @@ def test_web_serves_workbench_without_workspace_sidebar(tmp_path: Path) -> None:
     assert "summarizeFinalMessage" in static_app
     assert "srcdoc" in static_app
     assert "items.length) openPreview()" not in static_app
+    assert 'data-mode="ask"' not in page.text
     assert 'id="live-progress"' in page.text
     assert 'id="api-base-url"' in page.text
     composer_start = page.text.index('id="composer"')
-    assert page.text.index('id="upload-file-button"') > composer_start
-    assert page.text.index('id="upload-project-button"') > composer_start
     assert page.text.index('id="new-session"') < composer_start
     assert "不展示逐字内部思维链" in page.text
     assert "message-meta" in static_app
@@ -125,37 +124,6 @@ def test_session_name_is_validated(tmp_path: Path) -> None:
     assert client.post("/api/sessions", json={"name": "x" * 81}).status_code == 400
 
 
-def test_workspace_upload_preserves_relative_paths(tmp_path: Path) -> None:
-    client = TestClient(create_app(Settings(workspace=tmp_path, session_file=tmp_path / "sessions.json")))
-    response = client.post(
-        "/api/workspace/upload",
-        files=[("files", ("main.py", b"print('ok')", "text/x-python"))],
-        data={"paths": "demo/main.py"},
-    )
-    assert response.status_code == 200
-    assert (tmp_path / "demo" / "main.py").read_text(encoding="utf-8") == "print('ok')"
-
-
-def test_workspace_upload_rejects_escape(tmp_path: Path) -> None:
-    client = TestClient(create_app(Settings(workspace=tmp_path, session_file=tmp_path / "sessions.json")))
-    response = client.post(
-        "/api/workspace/upload",
-        files=[("files", ("secret.txt", b"no", "text/plain"))],
-        data={"paths": "../secret.txt"},
-    )
-    assert response.status_code == 400
-
-
-def test_workspace_upload_uses_dedicated_upload_limits(tmp_path: Path) -> None:
-    client = TestClient(create_app(Settings(workspace=tmp_path, max_file_bytes=4, max_upload_file_bytes=8, max_upload_total_bytes=12)))
-    config = client.get("/api/config").json()["upload_limits"]
-    assert config == {"max_files": 200, "max_file_bytes": 8, "max_total_bytes": 12}
-    accepted = client.post("/api/workspace/upload", files=[("files", ("image.png", b"12345678", "image/png"))])
-    assert accepted.status_code == 200
-    rejected = client.post("/api/workspace/upload", files=[("files", ("large.png", b"123456789", "image/png"))])
-    assert rejected.status_code == 413
-
-
 def test_api_config_can_be_saved_without_exposing_key(tmp_path: Path) -> None:
     config_file = tmp_path / ".env"
     client = TestClient(create_app(Settings(workspace=tmp_path, config_file=config_file)))
@@ -171,16 +139,6 @@ def test_api_config_can_be_saved_without_exposing_key(tmp_path: Path) -> None:
     from dotenv import dotenv_values
     assert dotenv_values(config_file)["CODING_AGENT_WORKSPACE"] == str(target_workspace)
     assert target_workspace.is_dir()
-    uploaded = client.post(
-        "/api/workspace/upload",
-        files=[("files", ("index.html", b"<h1>site</h1>", "text/html"))],
-        data={"paths": "website/index.html"},
-    )
-    assert uploaded.status_code == 200
-    assert (target_workspace / "website" / "index.html").read_text(encoding="utf-8") == "<h1>site</h1>"
-    assert not (tmp_path / "website" / "index.html").exists()
-
-
 def test_api_config_requires_valid_url_and_initial_key(tmp_path: Path) -> None:
     client = TestClient(create_app(Settings(workspace=tmp_path, config_file=tmp_path / ".env")))
     valid_workspace = str(tmp_path / "workspace")

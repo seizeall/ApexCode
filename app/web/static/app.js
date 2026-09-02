@@ -1,12 +1,12 @@
 let sessionId = null;
 let currentRun = null;
-let selectedMode = 'ask';
+let selectedMode = 'full';
 let detailEvents = [];
 let nameDialogResolve = null;
 let apiConfig = null;
 let previewCandidates = [];
 let currentPreviewUrl = '';
-const modeHelp = {full: '直接完成任务，安全边界仍然有效', ask: '先确认需求，再决定下一步', plan: '只生成执行计划，不修改工作区'};
+const modeHelp = {full: '直接完成任务，安全边界仍然有效', plan: '只生成执行计划，不修改工作区'};
 const toolNames = {list_files: '列出文件', read_file: '读取文件', search_text: '搜索文本', write_file: '写入文件', apply_patch: '应用补丁', run_command: '执行命令'};
 const $ = (id) => document.getElementById(id);
 
@@ -21,11 +21,6 @@ async function request(url, options) {
 
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (char) => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
-}
-
-function formatBytes(bytes) {
-  if (bytes >= 1024 * 1024) return `${Math.round(bytes / (1024 * 1024))} MB`;
-  return `${Math.round(bytes / 1024)} KB`;
 }
 
 function inlineMarkdown(value) {
@@ -262,11 +257,6 @@ function applyConfigStatus(config) {
   $('workspace-label').textContent = config.workspace || $('workspace-label').textContent;
   $('connection').classList.toggle('ready', Boolean(config.configured));
   $('connection').innerHTML = `<i></i>${config.configured ? '模型已配置' : '等待配置 API Key'}`;
-  const limits = config.upload_limits;
-  if (limits) {
-    $('upload-file-button').title = `上传文件（单个不超过 ${formatBytes(limits.max_file_bytes)}）`;
-    $('upload-project-button').title = `上传项目（单个文件不超过 ${formatBytes(limits.max_file_bytes)}，总量不超过 ${formatBytes(limits.max_total_bytes)}）`;
-  }
 }
 
 async function refreshPreviewCandidates() {
@@ -448,22 +438,6 @@ async function refreshSessions() {
   try { renderSessions((await request('/api/sessions')).sessions); } catch (_) { /* 当前会话仍可继续使用 */ }
 }
 
-async function uploadFiles(input) {
-  const files = Array.from(input.files || []);
-  if (!files.length) return;
-  const form = new FormData();
-  files.forEach(file => { form.append('files', file, file.name); form.append('paths', file.webkitRelativePath || file.name); });
-  try {
-    const result = await request('/api/workspace/upload', {method: 'POST', body: form});
-    const names = (result.files || []).map(item => item.path).join('、');
-    addEvent('上传完成', `已上传 ${result.files?.length || 0} 个文件：${names}`, 'assistant');
-  } catch (error) {
-    addEvent('上传失败', error.message, 'error');
-  } finally {
-    input.value = '';
-  }
-}
-
 async function renameSession(item) {
   const current = item.name || item.title || '';
   const name = await openNameDialog({rename: true, value: current});
@@ -514,10 +488,6 @@ async function init() {
     keyInput.type = keyInput.type === 'password' ? 'text' : 'password';
   };
   $('cancel-run').onclick = async () => { if (currentRun) await request(`/api/runs/${currentRun}/cancel`, {method: 'POST'}); };
-  // Labels own the file-picker activation so it remains a trusted user gesture
-  // in browsers that block synthetic clicks on hidden file inputs.
-  $('file-upload').addEventListener('change', (event) => uploadFiles(event.currentTarget));
-  $('project-upload').addEventListener('change', (event) => uploadFiles(event.currentTarget));
   $('details-toggle').onclick = () => toggleDetails(true); $('details-close').onclick = () => toggleDetails(false); $('details-backdrop').onclick = () => toggleDetails(false);
   $('session-modal-cancel').onclick = () => closeNameDialog();
   $('session-modal-submit').onclick = () => {

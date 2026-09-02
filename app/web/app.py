@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote, urlparse
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 from dotenv import set_key
@@ -70,7 +70,7 @@ def preview_file_allowed(workspace: Path, target: Path) -> bool:
 
 class MessageBody(BaseModel):
     prompt: str
-    mode: str = "ask"
+    mode: str = "full"
 
 
 class ApprovalBody(BaseModel):
@@ -265,11 +265,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "model": cfg.model,
             "base_url": cfg.base_url,
             "configured": bool(cfg.api_key),
-            "upload_limits": {
-                "max_files": 200,
-                "max_file_bytes": cfg.max_upload_file_bytes,
-                "max_total_bytes": cfg.max_upload_total_bytes,
-            },
         }
 
     @app.post("/api/config")
@@ -314,39 +309,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             question_count = sum(1 for item in session_histories.get(key, []) if item.get("role") == "user")
             result.append({"session_id": key, "message_count": question_count, "title": title, "name": session_names.get(key, "")})
         return {"sessions": result}
-
-    @app.post("/api/workspace/upload")
-    async def upload_workspace_files(files: list[UploadFile] = File(...), paths: list[str] = Form(default=[])) -> dict[str, Any]:
-        """接收用户主动选择的文件；路径始终限制在当前工作区内。"""
-        if not files:
-            raise HTTPException(400, "没有选择文件。")
-        if len(files) > 200:
-            raise HTTPException(413, "一次最多上传 200 个文件。")
-        uploaded: list[dict[str, Any]] = []
-        pending: list[tuple[Path, str, bytes]] = []
-        total_bytes = 0
-        max_total = cfg.max_upload_total_bytes
-        for index, upload_file in enumerate(files):
-            relative = paths[index] if index < len(paths) and paths[index].strip() else (upload_file.filename or "")
-            relative = relative.replace("\\", "/").lstrip("/")
-            if not relative or relative.endswith("/"):
-                raise HTTPException(400, "上传文件缺少有效路径。")
-            try:
-                destination = safe_path(cfg.workspace, relative)
-            except SafetyError as exc:
-                raise HTTPException(400, str(exc)) from exc
-            content = await upload_file.read(cfg.max_upload_file_bytes + 1)
-            if len(content) > cfg.max_upload_file_bytes:
-                raise HTTPException(413, f"文件超过大小限制：{relative}")
-            total_bytes += len(content)
-            if total_bytes > max_total:
-                raise HTTPException(413, "本次上传总大小超过限制。")
-            pending.append((destination, relative, content))
-        for destination, relative, content in pending:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(content)
-            uploaded.append({"path": relative, "bytes": len(content)})
-        return {"ok": True, "files": uploaded}
 
     @app.get("/api/workspace/tree")
     async def tree(path: str = ".", depth: int = 2) -> dict[str, Any]:
@@ -423,7 +385,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "会话不存在。")
         if not body.prompt.strip():
             raise HTTPException(400, "任务不能为空。")
-        if body.mode not in {"full", "plan", "ask"}:
+        if body.mode not in {"full", "plan"}:
             raise HTTPException(400, "未知运行模式。")
         if len(body.prompt) > 20_000:
             raise HTTPException(413, "任务内容过长。")
