@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>ApexCode</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260902-render">
+  <link rel="stylesheet" href="/static/styles.css?v=20260902-fixed-context">
 </head>
 <body>
   <div class="app-shell">
@@ -37,6 +37,6 @@
   <div id="session-modal" class="modal-backdrop hidden"><div class="modal session-modal"><div class="modal-kicker">会话设置</div><h2 id="session-modal-title">新建会话</h2><label class="session-name-label" for="session-name">会话名称</label><input id="session-name" class="session-name-input" maxlength="80" placeholder="例如：修复登录接口" autocomplete="off"><p id="session-name-error" class="session-name-error"></p><div class="modal-actions"><button id="session-modal-cancel" class="button ghost" type="button">取消</button><button id="session-modal-submit" class="button primary" type="button">创建会话</button></div></div></div>
   <div id="api-modal" class="modal-backdrop hidden"><form id="api-form" class="modal api-modal"><div class="modal-kicker">模型与工作区</div><h2>运行配置</h2><label class="config-label" for="api-base-url">API_BASE_URL</label><input id="api-base-url" class="config-input" type="url" required autocomplete="url" placeholder="https://api.openai.com/v1"><label class="config-label" for="api-key">API_KEY</label><div class="secret-field"><input id="api-key" class="config-input" type="password" autocomplete="off" placeholder="已配置时留空可保留原密钥"><button id="toggle-api-key" class="secret-toggle" type="button" title="显示或隐藏 API Key" aria-label="显示或隐藏 API Key">◉</button></div><label class="config-label" for="api-model">MODEL_NAME</label><input id="api-model" class="config-input" required autocomplete="off" placeholder="gpt-4o-mini"><label class="config-label" for="agent-workspace">本地工作区绝对路径</label><input id="agent-workspace" class="config-input" required autocomplete="off" placeholder="E:\projects\my-site"><p id="api-config-state" class="config-state"></p><div class="modal-actions"><button id="api-modal-cancel" class="button ghost" type="button">取消</button><button id="api-modal-submit" class="button primary" type="submit">保存配置</button></div></form></div>
   <div id="preview-backdrop" class="preview-backdrop hidden"><section class="preview-window" role="dialog" aria-modal="true" aria-label="网站预览"><header class="preview-toolbar"><div class="preview-title"><span class="preview-dot"></span><strong>网站预览</strong></div><select id="preview-select" class="preview-select" aria-label="选择预览入口"></select><span id="preview-state" class="preview-state">准备就绪</span><button id="preview-refresh" class="icon-button preview-tool" type="button" title="刷新预览" aria-label="刷新预览">↻</button><button id="preview-close" class="icon-button preview-tool" type="button" title="关闭预览" aria-label="关闭预览">×</button></header><iframe id="preview-frame" class="preview-frame" title="工作区网站预览" sandbox="allow-scripts allow-same-origin allow-forms allow-modals allow-popups allow-downloads"></iframe></section></div>
-  <script src="/static/app.js?v=20260902-render"></script>
+  <script src="/static/app.js?v=20260902-fixed-context"></script>
 </body>
 </html>

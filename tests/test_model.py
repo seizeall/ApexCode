@@ -16,7 +16,7 @@ async def test_openai_response_is_normalized() -> None:
 
     client = OpenAICompatibleClient(Settings(api_key="test", base_url="https://example.test/v1"), httpx.AsyncClient(transport=httpx.MockTransport(handler)))
     assert (await client.complete([], []))["content"] == "完成"
-    assert seen["max_tokens"] == 2048
+    assert "max_tokens" not in seen
 
 
 @pytest.mark.asyncio
