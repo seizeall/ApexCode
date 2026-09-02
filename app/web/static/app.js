@@ -439,7 +439,7 @@ async function sendPrompt(prompt) {
     if (event.type === 'tool_result') setLiveProgress(summarizeToolResult(event));
     if (event.type === 'error') setStatus('执行失败', 'failed');
     if (event.type === 'approval_required') { setStatus('等待确认', 'waiting'); setLiveProgress('等待你的确认'); showApproval(event); }
-    if (event.type === 'done') { addEvent('最终结果', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : (event.status === 'cancelled' ? '已取消' : '执行失败'), event.status === 'completed' ? 'done' : 'failed'); setLiveProgress(); setRunning(false); setComposerBusy(false); currentRun = null; stream.close(); refreshSessions(); refreshPreviewCandidates().then((items) => { if (event.status === 'completed' && items.length) openPreview(); }).catch(() => {}); }
+    if (event.type === 'done') { addEvent('最终结果', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : (event.status === 'cancelled' ? '已取消' : '执行失败'), event.status === 'completed' ? 'done' : 'failed'); setLiveProgress(); setRunning(false); setComposerBusy(false); currentRun = null; stream.close(); refreshSessions(); refreshPreviewCandidates().catch(() => {}); }
   };
   stream.onerror = () => { if (currentRun) setStatus('连接中断', 'failed'); setComposerBusy(false); stream.close(); };
 }

@@ -36,7 +36,7 @@ CODING_AGENT_MODEL=claude-3-5-sonnet-latest
 
 ## 可调参数
 
-`CODING_AGENT_WORKSPACE` 工作区路径（源码运行时使用；一键版固定为 `workspace`）；`CODING_AGENT_MAX_STEPS` 单任务最大轮数，默认 12；`CODING_AGENT_MAX_TOOL_CALLS` 工具调用上限，默认 40；`CODING_AGENT_COMMAND_TIMEOUT` 本地命令超时秒数，默认 30；`CODING_AGENT_MODEL_TIMEOUT` 模型请求超时秒数，默认 60；`CODING_AGENT_MODEL_MAX_TOKENS` 单次模型输出上限，留空表示不由客户端限制；`CODING_AGENT_MAX_CONTEXT_CHARS` 对话上下文字符预算，默认 1000000；`CODING_AGENT_MODEL_RETRIES` 网络失败重试次数，默认 2。
+`CODING_AGENT_WORKSPACE` 工作区路径（源码运行时使用；一键版固定为 `workspace`）；`CODING_AGENT_MAX_STEPS` 已默认取消轮数上限，留空即可持续执行，手动点击“停止任务”终止；`CODING_AGENT_MAX_TOOL_CALLS` 已默认取消工具调用上限，留空即可持续调用工具；`CODING_AGENT_COMMAND_TIMEOUT` 本地命令超时秒数，默认 30；`CODING_AGENT_MODEL_TIMEOUT` 模型请求超时秒数，默认 60；`CODING_AGENT_MODEL_MAX_TOKENS` 单次模型输出上限，留空表示不由客户端限制；`CODING_AGENT_MAX_CONTEXT_CHARS` 对话上下文字符预算，默认 1000000；`CODING_AGENT_MODEL_RETRIES` 网络失败重试次数，默认 2。
 
 不要把真实 `.env` 提交到 Git。遇到“未配置 API key”时，检查文件名是否确实为 `.env`、是否与 exe 同目录，以及是否重启了程序。
 

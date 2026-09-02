@@ -21,7 +21,7 @@ class Settings:
     base_url: str = "https://api.openai.com/v1"
     model: str = "gpt-4o-mini"
     workspace: Path = Path.cwd()
-    max_steps: int = 12
+    max_steps: int | None = None
     command_timeout: float = 30.0
     model_timeout: float = 60.0
     model_max_tokens: int | None = None
@@ -30,7 +30,7 @@ class Settings:
     max_upload_total_bytes: int = 100 * 1024 * 1024
     max_context_chars: int = 1_000_000
     model_retries: int = 2
-    max_tool_calls: int = 40
+    max_tool_calls: int | None = None
     session_file: Path | None = None
     config_file: Path | None = None
 
@@ -52,7 +52,7 @@ class Settings:
             base_url=os.getenv("CODING_AGENT_BASE_URL", cls.base_url).rstrip("/"),
             model=os.getenv("CODING_AGENT_MODEL", cls.model),
             workspace=root,
-            max_steps=int(os.getenv("CODING_AGENT_MAX_STEPS", cls.max_steps)),
+            max_steps=_optional_int(os.getenv("CODING_AGENT_MAX_STEPS", ""), cls.max_steps),
             command_timeout=float(os.getenv("CODING_AGENT_COMMAND_TIMEOUT", cls.command_timeout)),
             model_timeout=float(os.getenv("CODING_AGENT_MODEL_TIMEOUT", cls.model_timeout)),
             model_max_tokens=_optional_int(os.getenv("CODING_AGENT_MODEL_MAX_TOKENS", ""), cls.model_max_tokens),
@@ -61,7 +61,7 @@ class Settings:
             max_upload_total_bytes=int(os.getenv("CODING_AGENT_MAX_UPLOAD_TOTAL_BYTES", cls.max_upload_total_bytes)),
             max_context_chars=int(os.getenv("CODING_AGENT_MAX_CONTEXT_CHARS", cls.max_context_chars)),
             model_retries=int(os.getenv("CODING_AGENT_MODEL_RETRIES", cls.model_retries)),
-            max_tool_calls=int(os.getenv("CODING_AGENT_MAX_TOOL_CALLS", cls.max_tool_calls)),
+            max_tool_calls=_optional_int(os.getenv("CODING_AGENT_MAX_TOOL_CALLS", ""), cls.max_tool_calls),
             session_file=session_file,
             config_file=config_file,
         )

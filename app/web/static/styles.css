@@ -51,7 +51,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid rgba(12, 139, 130
 .conversation { display: flex; flex-direction: column; min-width: 0; min-height: 0; height: 100%; overflow: hidden; background: #f7f9fa; position: relative; }
 .conversation::before { content: ""; position: absolute; inset: 0; pointer-events: none; opacity: .24; background-image: linear-gradient(rgba(89, 113, 124, .045) 1px, transparent 1px), linear-gradient(90deg, rgba(89, 113, 124, .035) 1px, transparent 1px); background-size: 28px 28px; mask-image: linear-gradient(to bottom, black, transparent 82%); }
 .conversation-head, .live-progress, .timeline, .composer { position: relative; z-index: 1; }
-.conversation-head { padding: 34px 42px 24px; display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 1px solid #e7ecef; background: rgba(247, 249, 250, .82); }
+.conversation-head { padding: 22px 42px 16px; display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 1px solid #e7ecef; background: rgba(247, 249, 250, .82); }
 .eyebrow { font-size: 10px; letter-spacing: .18em; color: var(--accent); font-weight: 700; }
 h1 { font-size: 25px; line-height: 1.2; margin: 9px 0 0; color: #1b2c3a; letter-spacing: -.01em; }
 .head-note { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
@@ -65,6 +65,7 @@ h1 { font-size: 25px; line-height: 1.2; margin: 9px 0 0; color: #1b2c3a; letter-
 .progress-spinner { width: 13px; height: 13px; flex: 0 0 13px; border: 2px solid #b8d4d7; border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 .timeline { padding: 0 42px 22px; flex: 1; overflow: auto; scroll-behavior: smooth; }
 .process-panel { position: relative; z-index: 2; margin: 18px 42px 2px; border: 1px solid #d6e4e5; border-radius: 10px; background: rgba(250, 253, 253, .92); box-shadow: 0 5px 15px rgba(30, 69, 76, .05); animation: rise-in .28s ease both; }
+#process-panel { display: none !important; }
 .process-panel summary { display: flex; align-items: center; gap: 9px; padding: 11px 14px; cursor: pointer; list-style: none; color: #306c69; font-size: 11px; font-weight: 700; }
 .process-panel summary::-webkit-details-marker { display: none; }
 .process-summary-note { color: #8a9ca2; font-weight: 400; }

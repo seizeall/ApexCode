@@ -17,7 +17,7 @@ def test_web_serves_workbench_without_workspace_sidebar(tmp_path: Path) -> None:
     assert 'id="run-log"' not in page.text
     assert "运行记录" not in page.text
     assert 'id="details-drawer"' in page.text
-    assert 'id="process-panel"' in page.text
+    assert 'id="process-panel"' not in page.text
     assert 'id="upload-file-button"' in page.text
     assert 'id="upload-project-button"' in page.text
     assert 'id="api-settings"' in page.text
@@ -26,7 +26,7 @@ def test_web_serves_workbench_without_workspace_sidebar(tmp_path: Path) -> None:
     static_app = Path("app/web/static/app.js").read_text(encoding="utf-8")
     assert "summarizeFinalMessage" in static_app
     assert "srcdoc" in static_app
-    assert "items.length) openPreview()" in static_app
+    assert "items.length) openPreview()" not in static_app
     assert 'id="live-progress"' in page.text
     assert 'id="api-base-url"' in page.text
     composer_start = page.text.index('id="composer"')

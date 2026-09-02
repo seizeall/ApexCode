@@ -146,7 +146,9 @@ class AgentService:
             content = message.get("content") or "模型没有返回文本结果。"
             await emit({"type": "assistant", "message": content})
             return content, messages
-        for step in range(1, self.settings.max_steps + 1):
+        step = 0
+        while True:
+            step += 1
             if cancel_event and cancel_event.is_set():
                 await emit({"type": "cancelled", "message": "任务已取消。"})
                 return "任务已取消。", messages
@@ -173,7 +175,7 @@ class AgentService:
                     messages.append({"role": "user", "content": "不要直接在回复中粘贴源码。请改用 write_file 或 apply_patch 将完整代码写入工作区，并在写入后运行必要的验证命令；只有全部完成后再用简洁中文总结结果。"})
                     continue
                 return content or "模型没有返回文本结果。", messages
-            if tool_calls_used + len(calls) > self.settings.max_tool_calls:
+            if self.settings.max_tool_calls is not None and tool_calls_used + len(calls) > self.settings.max_tool_calls:
                 await emit({"type": "error", "message": "工具调用次数达到上限，任务已停止。"})
                 return "工具调用次数达到上限，任务已停止。", messages
             for call in calls:
@@ -204,5 +206,3 @@ class AgentService:
                 tool_calls_used += 1
                 if result.get("cancelled"):
                     return result.get("error", "用户取消了操作。"), messages
-        await emit({"type": "error", "message": "达到最大执行轮数，任务已停止。"})
-        return "达到最大执行轮数，任务已停止。", messages

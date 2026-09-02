@@ -206,7 +206,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             if run.cancel_event.is_set() or result == "任务已取消。":
                 run.status = "cancelled"
             else:
-                failed = result.startswith(("模型请求失败", "未配置", "达到最大", "工具调用次数"))
+                failed = result.startswith(("模型请求失败", "未配置", "工具调用次数"))
                 run.status = "failed" if failed else "completed"
         except asyncio.CancelledError:
             run.cancel_event.set()
@@ -311,7 +311,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         for key, value in session_histories.items():
             first_prompt = next((str(item.get("content", "")) for item in value if item.get("role") == "user"), "")
             title = session_names.get(key, "").strip() or first_prompt[:42] or "新会话"
-            result.append({"session_id": key, "message_count": len(value), "title": title, "name": session_names.get(key, "")})
+            question_count = sum(1 for item in session_histories.get(key, []) if item.get("role") == "user")
+            result.append({"session_id": key, "message_count": question_count, "title": title, "name": session_names.get(key, "")})
         return {"sessions": result}
 
     @app.post("/api/workspace/upload")
