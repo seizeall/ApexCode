@@ -20,7 +20,7 @@ ApexCode是一个**简单的的Coding Agent**。它不依赖第三方Agent框架
 - **参数与Schema校验**：Pydantic
 - **支持接口**：OpenAI-compatible API、Anthropic-compatible API
 - **项目仓库**：https://github.com/seizeall/ApexCode
-- **EXE安装包**：
+- **EXE安装包**：https://pan.baidu.com/s/18w9TpKO9A9Uh8mKQ3lBuoA 提取码: ic89
 
 ---
 
