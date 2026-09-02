@@ -23,6 +23,10 @@ def test_web_serves_workbench_without_workspace_sidebar(tmp_path: Path) -> None:
     assert 'id="api-settings"' in page.text
     assert 'id="preview-launch"' in page.text
     assert 'id="preview-frame"' in page.text
+    static_app = Path("app/web/static/app.js").read_text(encoding="utf-8")
+    assert "summarizeFinalMessage" in static_app
+    assert "srcdoc" in static_app
+    assert "items.length) openPreview()" in static_app
     assert 'id="live-progress"' in page.text
     assert 'id="api-base-url"' in page.text
     composer_start = page.text.index('id="composer"')
@@ -30,8 +34,8 @@ def test_web_serves_workbench_without_workspace_sidebar(tmp_path: Path) -> None:
     assert page.text.index('id="upload-project-button"') > composer_start
     assert page.text.index('id="new-session"') < composer_start
     assert "不展示逐字内部思维链" in page.text
-    assert "message-meta" in (Path("app/web/static/app.js").read_text(encoding="utf-8"))
-    assert "markdownToHtml" in Path("app/web/static/app.js").read_text(encoding="utf-8")
+    assert "message-meta" in static_app
+    assert "markdownToHtml" in static_app
     assert "markdown-table" in Path("app/web/static/styles.css").read_text(encoding="utf-8")
     tree = client.get("/api/workspace/tree")
     assert tree.status_code == 200

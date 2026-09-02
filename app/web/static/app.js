@@ -74,6 +74,27 @@ function markdownToHtml(markdown) {
   return output.join('');
 }
 
+function extractHtmlCode(markdown) {
+  const fenced = String(markdown).match(/```(?:html|htm)\s*\n([\s\S]*?)```/i);
+  if (fenced) return fenced[1].trim();
+  const raw = String(markdown).trim();
+  return /^(<!doctype html|<html[\s>])/i.test(raw) ? raw : '';
+}
+
+function summarizeFinalMessage(markdown) {
+  const source = String(markdown || '').replace(/\r\n?/g, '\n');
+  const htmlCode = extractHtmlCode(source);
+  const codeBlocks = [...source.matchAll(/```([\w-]*)\s*\n[\s\S]*?```/g)];
+  const withoutCode = source
+    .replace(/```[\w-]*\s*\n[\s\S]*?```/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (!codeBlocks.length && !htmlCode && withoutCode.length <= 1800) return {text: source, htmlCode: ''};
+  const compact = withoutCode.length > 1200 ? `${withoutCode.slice(0, 1200)}…` : withoutCode;
+  const note = `\n\n> 已生成 ${codeBlocks.length || 1} 段代码并写入工作区。请点击“预览网站”查看渲染结果。`;
+  return {text: `${compact || '网站代码已生成并写入工作区。'}${note}`, htmlCode};
+}
+
 function addEvent(label, text, type = '') {
   const timeline = $('timeline');
   const welcome = timeline.querySelector('.welcome');
@@ -85,7 +106,17 @@ function addEvent(label, text, type = '') {
   const displayLabel = isUser ? '你的提问' : label;
   el.innerHTML = `<div class="message-meta"><span class="message-avatar">${identity[0]}</span><span class="event-label">${displayLabel}</span></div><div class="message-body"></div>`;
   const body = el.querySelector('.message-body');
-  if (type === 'assistant' || type === 'error') body.innerHTML = markdownToHtml(text);
+  if (type === 'assistant' || type === 'error') {
+    const final = label === '最终结果' && type === 'assistant' ? summarizeFinalMessage(text) : {text, htmlCode: ''};
+    body.innerHTML = markdownToHtml(final.text);
+    if (final.htmlCode) {
+      const preview = document.createElement('details');
+      preview.className = 'inline-renderer';
+      preview.innerHTML = '<summary>渲染 HTML 预览</summary><iframe title="HTML 代码渲染预览" sandbox="allow-scripts"></iframe>';
+      preview.querySelector('iframe').srcdoc = final.htmlCode;
+      body.appendChild(preview);
+    }
+  }
   else body.textContent = text;
   timeline.appendChild(el);
   timeline.scrollTop = timeline.scrollHeight;
@@ -408,7 +439,7 @@ async function sendPrompt(prompt) {
     if (event.type === 'tool_result') setLiveProgress(summarizeToolResult(event));
     if (event.type === 'error') setStatus('执行失败', 'failed');
     if (event.type === 'approval_required') { setStatus('等待确认', 'waiting'); setLiveProgress('等待你的确认'); showApproval(event); }
-    if (event.type === 'done') { addEvent('最终结果', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : (event.status === 'cancelled' ? '已取消' : '执行失败'), event.status === 'completed' ? 'done' : 'failed'); setLiveProgress(); setRunning(false); setComposerBusy(false); currentRun = null; stream.close(); refreshSessions(); refreshPreviewCandidates().catch(() => {}); }
+    if (event.type === 'done') { addEvent('最终结果', event.message, event.status === 'completed' ? 'assistant' : 'error'); setStatus(event.status === 'completed' ? '已完成' : (event.status === 'cancelled' ? '已取消' : '执行失败'), event.status === 'completed' ? 'done' : 'failed'); setLiveProgress(); setRunning(false); setComposerBusy(false); currentRun = null; stream.close(); refreshSessions(); refreshPreviewCandidates().then((items) => { if (event.status === 'completed' && items.length) openPreview(); }).catch(() => {}); }
   };
   stream.onerror = () => { if (currentRun) setStatus('连接中断', 'failed'); setComposerBusy(false); stream.close(); };
 }

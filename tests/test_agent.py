@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.agent.service import AgentService, await_with_progress, compact_tool_arguments, compact_tool_result, trim_context
+from app.agent.service import AgentService, await_with_progress, compact_tool_arguments, compact_tool_result, looks_like_source, trim_context
 from app.config import Settings
 
 
@@ -63,10 +63,16 @@ def test_system_prompt_requests_auditable_summary_without_private_reasoning() ->
 
     assert "可审计的工作摘要" in SYSTEM_PROMPT
     assert "不输出逐字内部推理" in SYSTEM_PROMPT
+    assert "不要在最终答复中粘贴完整 HTML" in SYSTEM_PROMPT
 
 
 def test_progress_heartbeat_defaults_to_one_second() -> None:
     assert inspect.signature(await_with_progress).parameters["interval"].default == 1.0
+
+
+def test_source_dump_is_detected() -> None:
+    assert looks_like_source("```html\n<div>demo</div>\n```")
+    assert not looks_like_source("已经完成网站开发，文件已写入工作区。")
 
 
 @pytest.mark.asyncio

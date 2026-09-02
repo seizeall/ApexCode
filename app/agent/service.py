@@ -18,7 +18,7 @@ class AgentCancelled(RuntimeError):
     """The user cancelled the current task."""
 
 
-SYSTEM_PROMPT = """你是一个运行在本机工作区内的编程助手。先理解任务，再用工具检查真实文件；不要猜测文件内容。\n只有在确实需要时才修改文件或执行命令。工具调用前可以输出不超过 80 字的可审计的工作摘要，只陈述当前目标、关键决定和下一步，不输出逐字内部推理。每次工具调用后检查结果，遇到错误要解释原因并调整方案。完成后用简洁中文说明改动、验证方式和仍需用户注意的事项，不复述大段文件内容或命令输出。"""
+SYSTEM_PROMPT = """你是一个运行在本机工作区内的编程助手。先理解任务，再用工具检查真实文件；不要猜测文件内容。\n只有在确实需要时才修改文件或执行命令。工具调用前可以输出不超过 80 字的可审计的工作摘要，只陈述当前目标、关键决定和下一步，不输出逐字内部推理。每次工具调用后检查结果，遇到错误要解释原因并调整方案。完成后必须用简洁中文输出面向用户的成果总结，只说明完成了什么、修改了哪些文件、如何验证、如何预览和仍需注意的事项；不要在最终答复中粘贴完整 HTML、CSS、JavaScript 或命令输出，源码已经写入工作区并由内置预览器渲染。"""
 
 
 T = TypeVar("T")
@@ -98,6 +98,17 @@ def trim_context(messages: list[dict[str, Any]], limit: int) -> list[dict[str, A
     return system + kept
 
 
+def looks_like_source(text: str) -> bool:
+    """Detect a code dump that should be written with tools instead of shown as the result."""
+    value = str(text or '').strip()
+    if not value:
+        return False
+    if '```' in value or value.lower().startswith(('<!doctype html', '<html', '{"')):
+        return True
+    markers = ('function ', 'const ', 'let ', 'import ', 'export ', 'def ', 'class ', '<script', '<style', '@media', '=>')
+    return len(value) >= 500 and sum(marker in value for marker in markers) >= 2
+
+
 class AgentService:
     def __init__(self, settings: Settings, model: OpenAICompatibleClient | None = None) -> None:
         self.settings = settings
@@ -122,6 +133,7 @@ class AgentService:
         messages.append({"role": "user", "content": prompt})
         registry = ToolRegistry(self.settings, approve, cancel_event)
         tool_calls_used = sum(1 for item in messages if item.get("role") == "tool")
+        source_correction_attempts = 0
         if mode in {"plan", "ask"}:
             await emit({"type": "step", "step": 1, "message": "正在整理需求" if mode == "plan" else "正在确认需求"})
             messages = trim_context(messages, self.settings.max_context_chars)
@@ -150,10 +162,16 @@ class AgentService:
                 return str(exc), messages
             messages.append(message)
             content = message.get("content") or ""
-            if content:
-                await emit({"type": "assistant", "message": content})
             calls = message.get("tool_calls") or []
+            source_reply = mode == "full" and looks_like_source(content) and not calls
+            if content and not source_reply:
+                await emit({"type": "assistant", "message": content})
             if not calls:
+                if source_reply and source_correction_attempts < 1:
+                    source_correction_attempts += 1
+                    await emit({"type": "step", "step": step, "message": "模型返回了源码文本，正在改为通过本地工具写入文件"})
+                    messages.append({"role": "user", "content": "不要直接在回复中粘贴源码。请改用 write_file 或 apply_patch 将完整代码写入工作区，并在写入后运行必要的验证命令；只有全部完成后再用简洁中文总结结果。"})
+                    continue
                 return content or "模型没有返回文本结果。", messages
             if tool_calls_used + len(calls) > self.settings.max_tool_calls:
                 await emit({"type": "error", "message": "工具调用次数达到上限，任务已停止。"})
