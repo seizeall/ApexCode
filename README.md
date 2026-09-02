@@ -1,7 +1,7 @@
 
 
 <p align="center">
-  <b>一个轻量级Coding Agent工作台</b>
+  <b>ApexCode：一个轻量级Coding Agent工作台</b>
 </p>
 
 
